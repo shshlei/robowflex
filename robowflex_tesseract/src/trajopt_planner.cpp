@@ -652,13 +652,11 @@ TrajOptPlanner::PlannerResult TrajOptPlanner::solve(const SceneConstPtr &scene,
             hypercube::manipTesseractTrajToRobotTraj(tss_current_traj, ref_state_, manip_, env_,
                                                      current_traj);
 
-            trajectory_->clear();
-            trajectory_ = current_traj;
             auto const &ct = std::make_shared<Trajectory>(current_traj);
             bool is_ct_collision_free = ct->isCollisionFree(scene);
 
             // If trajectory is better than current, update the trajectory and cost.
-            if ((opt.results().total_cost < best_cost) and is_ct_collision_free)
+            if ((opt.results().total_cost < best_cost))
             {
                 // Update best cost.
                 best_cost = opt.results().total_cost;
@@ -670,8 +668,9 @@ TrajOptPlanner::PlannerResult TrajOptPlanner::solve(const SceneConstPtr &scene,
                 tesseract_trajectory_ = tss_current_traj;
                 trajectory_ = current_traj;
 
-                // Solution is collision-free.
-                planner_result.second = true;
+                if (is_ct_collision_free)
+                    // Solution is collision-free.
+                    planner_result.second = true;
             }
         }
 
