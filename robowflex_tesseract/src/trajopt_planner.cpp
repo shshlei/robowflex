@@ -651,6 +651,9 @@ TrajOptPlanner::PlannerResult TrajOptPlanner::solve(const SceneConstPtr &scene,
                 std::make_shared<robot_trajectory::RobotTrajectory>(robot_->getModelConst(), group_);
             hypercube::manipTesseractTrajToRobotTraj(tss_current_traj, ref_state_, manip_, env_,
                                                      current_traj);
+
+            trajectory_->clear();
+            trajectory_ = current_traj;
             auto const &ct = std::make_shared<Trajectory>(current_traj);
             bool is_ct_collision_free = ct->isCollisionFree(scene);
 
