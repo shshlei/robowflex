@@ -236,11 +236,12 @@ TrajOptPlanner::plan(const SceneConstPtr &scene, const planning_interface::Motio
     // Plan.
     auto result = plan(scene, start_state, goal_state);
     res.error_code_.val = moveit_msgs::MoveItErrorCodes::FAILURE;
-    if (result.first and result.second)
+    if (result.first)
     {
         res.planning_time_ = time_;
         res.trajectory_ = trajectory_;
-        res.error_code_.val = moveit_msgs::MoveItErrorCodes::SUCCESS;
+        if (result.second)
+            res.error_code_.val = moveit_msgs::MoveItErrorCodes::SUCCESS;
     }
 
     return res;
@@ -611,6 +612,8 @@ TrajOptPlanner::PlannerResult TrajOptPlanner::solve(const SceneConstPtr &scene,
     // Initialize.
     double total_time = 0.0;
     double best_cost = std::numeric_limits<double>::infinity();
+    trajectory_->clear();
+    bool found_feasible_trajectory = false;
 
     while (true)
     {
@@ -640,37 +643,44 @@ TrajOptPlanner::PlannerResult TrajOptPlanner::solve(const SceneConstPtr &scene,
         total_time += time;
         time_ = total_time;
 
-        if (opt.results().status == sco::OptStatus::OPT_CONVERGED)
+        // Get the found trajectory.
+        auto tss_current_traj = getTraj(opt.x(), prob->GetVars());
+        auto current_traj =
+            std::make_shared<robot_trajectory::RobotTrajectory>(robot_->getModelConst(), group_);
+        hypercube::manipTesseractTrajToRobotTraj(tss_current_traj, ref_state_, manip_, env_, current_traj);
+        // Check for collisions.
+        auto const &ct = std::make_shared<Trajectory>(current_traj);
+        bool is_ct_collision_free = ct->isCollisionFree(scene);
+
+        // If a feasible trajectory has not been found, save the current if the cost is better (and there is
+        // convergence). Otherwise, save the current only if the cost is better and is collision-free.
+        if (!found_feasible_trajectory)
         {
-            // Optimization problem converged.
-            planner_result.first = true;
-
-            // Check for collisions.
-            auto tss_current_traj = getTraj(opt.x(), prob->GetVars());
-            auto current_traj =
-                std::make_shared<robot_trajectory::RobotTrajectory>(robot_->getModelConst(), group_);
-            hypercube::manipTesseractTrajToRobotTraj(tss_current_traj, ref_state_, manip_, env_,
-                                                     current_traj);
-
-            auto const &ct = std::make_shared<Trajectory>(current_traj);
-            bool is_ct_collision_free = ct->isCollisionFree(scene);
-
-            // If trajectory is better than current, update the trajectory and cost.
-            if ((opt.results().total_cost < best_cost))
+            if ((opt.results().status == sco::OptStatus::OPT_CONVERGED) and
+                (opt.results().total_cost < best_cost))
             {
-                // Update best cost.
+                planner_result.first = true;
                 best_cost = opt.results().total_cost;
-
-                // Clear current trajectory.
                 trajectory_->clear();
-
-                // Update trajectory.
                 tesseract_trajectory_ = tss_current_traj;
                 trajectory_ = current_traj;
 
                 if (is_ct_collision_free)
-                    // Solution is collision-free.
+                {
+                    found_feasible_trajectory = true;
                     planner_result.second = true;
+                }
+            }
+        }
+        else
+        {
+            if ((opt.results().status == sco::OptStatus::OPT_CONVERGED) and
+                (opt.results().total_cost < best_cost) and is_ct_collision_free)
+            {
+                best_cost = opt.results().total_cost;
+                trajectory_->clear();
+                tesseract_trajectory_ = tss_current_traj;
+                trajectory_ = current_traj;
             }
         }
 
