@@ -1,0 +1,7 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="node1" title=" " alt="" coords="5,78,112,105"/>
+<area shape="rect" id="node2" href="$classrobowflex_1_1darts_1_1Widget.html" title="Abstract class for IMGUI Widget." alt="" coords="160,78,341,105"/>
+<area shape="rect" id="node3" href="$classrobowflex_1_1darts_1_1TSREditWidget.html" title="IMGUI widget to design TSRs." alt="" coords="395,5,580,47"/>
+<area shape="rect" id="node4" href="$classrobowflex_1_1darts_1_1TSRSolveWidget.html" title="Class for solving a set of TSRs." alt="" coords="389,71,585,112"/>
+<area shape="rect" id="node5" href="$classrobowflex_1_1darts_1_1WindowWidget.html" title="IMGUI widget to add interactive GUI elements programmatically." alt="" coords="394,136,581,177"/>
+</map>
