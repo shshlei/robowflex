@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(robowflex_ompl)
 
+add_definitions(-DBT_USE_DOUBLE_PRECISION)
+
 set(LIBRARY_NAME ${PROJECT_NAME})
 
 set(CMAKE_MODULE_PATH

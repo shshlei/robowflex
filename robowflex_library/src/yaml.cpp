@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 
+#include <boost/variant.hpp>
 #include <boost/algorithm/hex.hpp>
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
@@ -12,12 +13,205 @@
 
 #include <robowflex_library/geometry.h>
 #include <robowflex_library/io.h>
-#include <robowflex_library/tf.h>
 #include <robowflex_library/io/yaml.h>
 #include <robowflex_library/macros.h>
 #include <robowflex_library/yaml.h>
 
 using namespace robowflex;
+
+//template <class... Args>
+//MetricPtr yaml::decodeMetricVariant(const YAML::Node& node)
+//{
+//    return decodeMetricVariantHelper<Args...>(node);
+//}
+//
+//template <>
+//MetricPtr yaml::decodeMetricVariant(const YAML::Node& node)
+//{
+//    return nullptr;
+//}
+
+namespace
+{
+    class encodeMetricVariantVisitor : public boost::static_visitor<void>
+    {
+    public:
+        encodeMetricVariantVisitor(YAML::Node& node) : node(node){};
+
+        // encode true/false as 1/0
+        void operator()(const bool& metric) const
+        {
+            node = static_cast<int>(metric);
+        }
+
+        // encode true/false as 1/0
+        void operator()(const std::vector<bool>& metrics) const
+        {
+            std::vector<int> int_vector;
+            for (const auto& metric : metrics)
+                int_vector.push_back(static_cast<int>(metric));
+
+            node = int_vector;
+        }
+
+        template <typename T>
+            void operator()(const T& metric) const
+            {
+                node = metric;
+            }
+
+        YAML::Node& node;
+    };
+}  // namespace
+
+void yaml::merge_node(YAML::Node target, YAML::Node const& source)
+{
+    switch (source.Type())
+    {
+        case YAML::NodeType::Scalar:
+            target = source.Scalar();
+            break;
+        case YAML::NodeType::Map:
+            merge_map(target, source);
+            break;
+        case YAML::NodeType::Sequence:
+            merge_sequences(target, source);
+            break;
+        case YAML::NodeType::Null:
+            throw std::runtime_error("merge_node: Null source nodes not supported");
+        case YAML::NodeType::Undefined:
+            throw std::runtime_error("merge_node: Undefined source nodes not supported");
+    }
+}
+
+void yaml::merge_map(YAML::Node target, YAML::Node const& source)
+{
+    for (auto const& j : source)
+    {
+        merge_node(target[j.first.Scalar()], j.second);
+    }
+}
+
+void yaml::merge_sequences(YAML::Node target, YAML::Node const& source)
+{
+    for (std::size_t i = 0; i != source.size(); ++i)
+    {
+        if (i < target.size())
+        {
+            merge_node(target[i], source[i]);
+        }
+        else
+        {
+            target.push_back(YAML::Clone(source[i]));
+        }
+    }
+}
+
+void yaml::merge(class_overrides& by_class, YAML::Node node)
+{
+    // Only Map nodes can override by-class values ...
+    if (not node.IsMap())
+    {
+        return;
+    }
+    // ... iterate over the node, searching for nodes with a key starting
+    // with ':' ...
+    for (auto i : node)
+    {
+        // ... the node is a map, there should be keys for all sub nodes ...
+        // std::runtime_error(i.first.as<std::string>("error on key"));
+        // ... found a key, check the format ...
+        std::string key = i.first.as<std::string>();
+        if (key[0] != ':')
+        {
+            continue;
+        }
+        // ... try to insert into the map ...
+        auto ins = by_class.emplace(key, i.second);
+        if (ins.second == true)
+        {
+            // ... good insert, nothing left to do ...
+            continue;
+        }
+        // ... okay there was a node for the class in the map already,
+        // need to merge the values ...
+        merge_node(ins.first->second, i.second);
+    }
+}
+
+class_overrides yaml::clone(class_overrides const& by_class)
+{
+    class_overrides tmp;
+    for (auto const& i : by_class)
+    {
+        tmp.emplace(i.first, YAML::Clone(i.second));
+    }
+    return tmp;
+}
+
+template <class... Args>
+bool yaml::scalar_compare(const YAML::Node& source, const YAML::Node& target)
+{
+    return helper_compare<Args...>(source, target);
+}
+
+template <>
+bool yaml::scalar_compare<>(const YAML::Node&, const YAML::Node&)
+{
+    return true;
+}
+
+bool yaml::isSubset(const YAML::Node& source, const YAML::Node& target)
+{
+    // Validation
+    // TODO validate Tag ? Not supported in yaml-cpp ...
+    if (source.Type() != target.Type())
+        return false;
+
+    switch (source.Type())
+    {
+        case YAML::NodeType::Scalar:
+            return scalar_compare<bool, int, double, std::string>(source, target);
+        case YAML::NodeType::Null:
+            return true;
+        case YAML::NodeType::Undefined:
+            return false;
+        case YAML::NodeType::Map:
+        case YAML::NodeType::Sequence:
+            if (source.size() > target.size())
+                return false;
+    }
+
+    // Loop through map
+    if (source.IsMap())
+    {
+        bool result = true;
+        for (YAML::const_iterator it1 = source.begin(), it2; it1 != source.end() && result == true; ++it1)
+        {
+            const auto& key = it1->first.as<std::string>();
+
+            if (target[key])
+                result = isSubset(it1->second, target[key]);
+            else
+                return false;
+        }
+        return result;
+    }
+
+    // Loop through sequence
+    if (source.IsSequence())
+    {
+        bool result = true;
+        for (YAML::const_iterator it1 = source.begin(), it2 = target.begin(); it1 != source.end() && result == true;
+                ++it1, ++it2)
+        {
+            result = isSubset(*it1, *it2);
+        }
+        return result;
+    }
+
+    return true;
+}
 
 namespace
 {
@@ -835,10 +1029,6 @@ namespace YAML
 
         node["id"] = rhs.id;
 
-#if ROBOWFLEX_MOVEIT_VERSION >= ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-        node["pose"] = rhs.pose;
-#endif
-
         if (!rhs.type.key.empty())
             node["type"] = rhs.type;
 
@@ -882,8 +1072,6 @@ namespace YAML
 
     bool convert<moveit_msgs::CollisionObject>::decode(const Node &node, moveit_msgs::CollisionObject &rhs)
     {
-        RobotPose pose = TF::identity();
-        geometry_msgs::Pose pose_msg = TF::poseEigenToMsg(pose);
         rhs = moveit_msgs::CollisionObject();
 
         if (IO::isNode(node["header"]))
@@ -894,16 +1082,6 @@ namespace YAML
         if (IO::isNode(node["id"]))
             rhs.id = node["id"].as<std::string>();
 
-        if (IO::isNode(node["pose"]))
-        {
-            pose_msg = node["pose"].as<geometry_msgs::Pose>();
-            pose = TF::poseMsgToEigen(pose_msg);
-        }
-
-#if ROBOWFLEX_MOVEIT_VERSION >= ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-        rhs.pose = pose_msg;
-#endif
-
         if (IO::isNode(node["type"]))
             rhs.type = node["type"].as<object_recognition_msgs::ObjectType>();
 
@@ -911,36 +1089,18 @@ namespace YAML
         {
             rhs.primitives = node["primitives"].as<std::vector<shape_msgs::SolidPrimitive>>();
             rhs.primitive_poses = node["primitive_poses"].as<std::vector<geometry_msgs::Pose>>();
-
-            // If loading a newer format, add pose to include offset
-#if ROBOWFLEX_MOVEIT_VERSION < ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-            for (auto &primitive_pose : rhs.primitive_poses)
-                primitive_pose = TF::poseEigenToMsg(pose * TF::poseMsgToEigen(primitive_pose));
-#endif
         }
 
         if (IO::isNode(node["meshes"]))
         {
             rhs.meshes = node["meshes"].as<std::vector<shape_msgs::Mesh>>();
             rhs.mesh_poses = node["mesh_poses"].as<std::vector<geometry_msgs::Pose>>();
-
-            // If loading a newer format, add pose to include offset
-#if ROBOWFLEX_MOVEIT_VERSION < ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-            for (auto &mesh_pose : rhs.mesh_poses)
-                mesh_pose = TF::poseEigenToMsg(pose * TF::poseMsgToEigen(mesh_pose));
-#endif
         }
 
         if (IO::isNode(node["planes"]))
         {
             rhs.planes = node["planes"].as<std::vector<shape_msgs::Plane>>();
             rhs.plane_poses = node["plane_poses"].as<std::vector<geometry_msgs::Pose>>();
-
-            // If loading a newer format, add pose to include offset
-#if ROBOWFLEX_MOVEIT_VERSION < ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-            for (auto &plane_pose : rhs.plane_poses)
-                plane_pose = TF::poseEigenToMsg(pose * TF::poseMsgToEigen(plane_pose));
-#endif
         }
 
         if (IO::isNode(node["operation"]))
@@ -1660,6 +1820,9 @@ namespace YAML
         if (!rhs.trajectory_constraints.constraints.empty())
             node["trajectory_constraints"] = rhs.trajectory_constraints;
 
+//        if (!rhs.pipeline_id.empty())
+//            node["pipeline_id"] = rhs.pipeline_id;
+
         if (!rhs.planner_id.empty())
             node["planner_id"] = rhs.planner_id;
 
@@ -1826,91 +1989,3 @@ namespace YAML
         return true;
     }
 }  // namespace YAML
-
-namespace robowflex
-{
-    namespace IO
-    {
-        bool isNode(const YAML::Node &node)
-        {
-            try
-            {
-                bool r = node.IsDefined() and not node.IsNull();
-                if (r)
-                    try
-                    {
-                        r = node.as<std::string>() != "~";
-                    }
-                    catch (std::exception &e)
-                    {
-                    }
-
-                return r;
-            }
-            catch (YAML::InvalidNode &e)
-            {
-                return false;
-            }
-        }
-
-        moveit_msgs::RobotState robotStateFromNode(const YAML::Node &node)
-        {
-            return node.as<moveit_msgs::RobotState>();
-        }
-
-        YAML::Node toNode(const geometry_msgs::Pose &msg)
-        {
-            YAML::Node node;
-            node = msg;
-            return node;
-        }
-
-        geometry_msgs::Pose poseFromNode(const YAML::Node &node)
-        {
-            return node.as<geometry_msgs::Pose>();
-        }
-
-        YAML::Node toNode(const moveit_msgs::PlanningScene &msg)
-        {
-            YAML::Node node;
-            node = msg;
-            return node;
-        }
-
-        YAML::Node toNode(const moveit_msgs::MotionPlanRequest &msg)
-        {
-            YAML::Node node;
-            node = msg;
-            return node;
-        }
-
-        YAML::Node toNode(const moveit_msgs::RobotTrajectory &msg)
-        {
-            YAML::Node node;
-            node = msg;
-            return node;
-        }
-
-        YAML::Node toNode(const moveit_msgs::RobotState &msg)
-        {
-            YAML::Node node;
-            node = msg;
-            return node;
-        }
-
-        bool fromYAMLFile(moveit_msgs::PlanningScene &msg, const std::string &file)
-        {
-            return IO::YAMLFileToMessage(msg, file);
-        }
-
-        bool fromYAMLFile(moveit_msgs::MotionPlanRequest &msg, const std::string &file)
-        {
-            return IO::YAMLFileToMessage(msg, file);
-        }
-
-        bool fromYAMLFile(moveit_msgs::RobotState &msg, const std::string &file)
-        {
-            return IO::YAMLFileToMessage(msg, file);
-        }
-    }  // namespace IO
-}  // namespace robowflex

@@ -31,5 +31,5 @@ max_acceleration_scaling_factor: 0
 workspace_parameters:
   header:
     frame_id: ""
-  max_corner: [1, 1, 1]
-  min_corner: [-1, -1, -1]
+  max_corner: [10, 10, 10]
+  min_corner: [-10, -10, -10]

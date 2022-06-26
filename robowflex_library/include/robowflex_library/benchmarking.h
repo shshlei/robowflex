@@ -351,6 +351,10 @@ namespace robowflex
         /** \name Building Experiment
             \{ */
 
+        Experiment(const std::string &name) : name_(name)
+        {
+        }
+
         /** \brief Constructor.
          *  \param[in] name Name of this experiment.
          *  \param[in] options Options for the internal profiler.
@@ -364,6 +368,8 @@ namespace robowflex
                    double allowed_time = 60.0,        //
                    std::size_t trials = 100,          //
                    bool timeout = false);
+
+        bool initializeFromYAML(const YAML::Node& node);
 
         /** \brief Add a query to the experiment for profiling.
          *  \param[in] planner_name Name to associate with this query. Does not need to be unique.

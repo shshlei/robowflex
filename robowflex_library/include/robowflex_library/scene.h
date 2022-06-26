@@ -40,9 +40,10 @@ namespace robowflex
      *  The Scene class is a wrapper around _MoveIt!_'s planning_scene::PlanningScene, providing access to set
      * and manipulate collision objects, attach and detach objects to the robot, and so on. There are also
      * utilities to load and save planning scenes from YAML files (toYAMLFile() and fromYAMLFile()).
-     *  Note that this class has *its own* robot state, separate from the one in the provided Robot.
-     * Information between this state and the Robot's scratch state are not synchronized, you must do this
-     * manually.
+     *  Note that this class has *its own* robot state, separate from the one in the provided Robot. For
+     * example, using attachObject() without providing your own state will attach the object to this internal
+     * state. Information between this state and the Robot's scratch state are not synchronized, you must do
+     * this manually.
      */
     class Scene : public ID
     {
@@ -74,6 +75,10 @@ namespace robowflex
 
         /** \name Getters and Setters
             \{ */
+
+        const std::string getName() const;
+
+        void setName(const std::string name);
 
         /** \brief Get a const reference to the planning scene.
          *  \return The planning scene.
@@ -206,6 +211,14 @@ namespace robowflex
          */
         bool setCollisionDetector(const std::string &detector_name) const;
 
+        /** \brief Attach the named collision object \a name to the default end-effector of the robot.
+         *  Only works if there is one end-effector in the system. Uses all end-effector links as allowed
+         *  touch links.
+         *  \param[in] name Name of collision to attach.
+         *  \return True on success, false on failure.
+         */
+        bool attachObject(const std::string &name);
+
         /** \brief Attach the named collision object \a name to the default end-effector of the given robot \a
          *  state. Only works if there is one end-effector in the system. Uses all end-effector links as
          *  allowed touch links.
@@ -213,7 +226,16 @@ namespace robowflex
          *  \param[in] state State of robot the object will be attached to
          *  \return True on success, false on failure.
          */
-        bool attachObjectToState(robot_state::RobotState &state, const std::string &name) const;
+        bool attachObject(robot_state::RobotState &state, const std::string &name);
+
+        /** \brief Attach the named collision object \a name to the link \a ee_link.
+         *  \param[in] name Name of object to attach.
+         *  \param[in] ee_link Link to attach object to.
+         *  \param[in] touch_links Links the object is allowed to touch.
+         *  \return True on success, false on failure.
+         */
+        bool attachObject(const std::string &name, const std::string &ee_link,
+                          const std::vector<std::string> &touch_links);
 
         /** \brief Attach the named collision object \a name to the link \a ee_link of the given robot \a
          *  state
@@ -223,33 +245,10 @@ namespace robowflex
          *  \param[in] touch_links Links the object is allowed to touch.
          *  \return True on success, false on failure.
          */
-        bool attachObjectToState(robot_state::RobotState &state, const std::string &name,
-                                 const std::string &ee_link,
-                                 const std::vector<std::string> &touch_links) const;
-
-        /** \brief Helper function that attaches object to internal state and removes from scene.
-         *  \param[in] name Name of object to attach to robot and remove from scene.
-         *  \return True on success, false on failure.
-         */
-        bool attachObject(const std::string &name);
-
-        /** \brief Helper function that attaches object provided state and removes from scene.
-         *  \param[in] name Name of object to attach to robot and remove from scene.
-         *  \return True on success, false on failure.
-         */
-        bool attachObject(robot_state::RobotState &state, const std::string &name);
-
-        /** \brief Helper function that attaches object provided state and removes from scene.
-         *  \param[in] state State of the robot to attach to.
-         *  \param[in] name Name of object to attach to.
-         *  \param[in] ee_link Link to attach object to.
-         *  \param[in] touch_links Links the object is allowed to touch.
-         *  \return True on success, false on failure.
-         */
         bool attachObject(robot_state::RobotState &state, const std::string &name, const std::string &ee_link,
                           const std::vector<std::string> &touch_links);
 
-        /** \brief Helper function that detaches the object from the internal scene state.
+        /** \brief Detach an object \a name from the robot.
          *  \param[in] name Name of collision to detach.
          *  \return True on success, false on failure.
          */
@@ -296,20 +295,6 @@ namespace robowflex
          */
         double distanceBetweenObjects(const std::string &one, const std::string &two) const;
 
-        /** \brief Get the distance to collision using an ACM.
-         *  \param[in] state State of the robot.
-         *  \param[in] one acm ACM to use for distance check.
-         *  \return The distance between all colliding entries in ACM. On error, returns NaN.
-         */
-        double distanceACM(const robot_state::RobotState &state,
-                           const collision_detection::AllowedCollisionMatrix &acm) const;
-
-        /** \brief Disables collision between all entries in the ACM (all robot links and objects in the
-         * scene)
-         *  \param[in,out] acm ACM to clear.
-         */
-        void clearACM(collision_detection::AllowedCollisionMatrix &acm) const;
-
         /** \brief Get the group state validity callback function that uses this scene.
          *  \param[in] verbose If true, will have verbose collision output.
          *  \return The group state validity function. This function will return true if there is no
@@ -333,7 +318,16 @@ namespace robowflex
          *  \return True on success, false on failure.
          */
         bool fromYAMLFile(const std::string &file);
+        bool fromYAMLNode(const YAML::Node& node);
         bool fromOpenRAVEXMLFile(const std::string &file, std::string models_dir = "");
+
+        /** \brief Load a planning scene from a URDF or XACRO file using the urdf_to_scene pkg.
+         *  \param[in] file File to load planning scene from.
+         *  \return True on success, false on failure.
+         */
+        bool fromURDFFile(const std::string& file);
+
+        bool fromURDFString(const std::string& str);
 
         /** \} */
 
@@ -349,6 +343,8 @@ namespace robowflex
 
         CollisionPluginLoaderPtr loader_;  ///< Plugin loader that sets collision detectors for the scene.
         planning_scene::PlanningScenePtr scene_;  ///< Underlying planning scene.
+
+        std::map<std::string, std::string> mesh_resources_ = {};  ///<
     };
 }  // namespace robowflex
 

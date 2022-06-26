@@ -69,18 +69,72 @@ bool Robot::initialize(const std::string &urdf_file, const std::string &srdf_fil
     }
 
     if (not limits_file.empty())
+    {
         if (not loadYAMLFile(ROBOT_DESCRIPTION + ROBOT_PLANNING, limits_file, limits_function_))
         {
             RBX_ERROR("Failed to load joint limits!");
             return false;
         }
+    }
 
     if (not kinematics_file.empty())
+    {
         if (not initializeKinematics(kinematics_file))
         {
             RBX_ERROR("Failed to load kinematics!");
             return false;
         }
+    }
+
+    initializeInternal();
+    return true;
+}
+
+bool Robot::initializeFromYAML(const YAML::Node& node)
+{
+    if (loader_)
+    {
+        RBX_ERROR("Already initialized!");
+        return false;
+    }
+
+    if (not node["urdf"])
+    {
+        RBX_ERROR("Failed to load URDF!");
+        return false;
+    }
+    urdf_ = node["urdf"].as<std::string>();
+
+    if (not node["srdf"])
+    {
+        RBX_ERROR("Failed to load SRDF!");
+        return false;
+    }
+    srdf_ = node["srdf"].as<std::string>();
+
+    if (node["joint_limits"])
+    {
+        if (not loadYAMLNode(ROBOT_DESCRIPTION + ROBOT_PLANNING, node["joint_limits"], limits_function_))
+        {
+            RBX_ERROR("Failed to load joint limits!");
+            return false;
+        }
+    }
+
+    if (not node["kinematics"])
+    {
+        if (kinematics_)
+        {
+            RBX_ERROR("Already loaded kinematics!");
+            return false;
+        }
+    }
+
+    if (!loadYAMLNode(ROBOT_DESCRIPTION + ROBOT_KINEMATICS, node["kinematics"], kinematics_function_))
+    {
+        RBX_ERROR("Failed to load kinematics!");
+        return false;
+    }
 
     initializeInternal();
     return true;
@@ -273,6 +327,31 @@ bool Robot::loadYAMLFile(const std::string &name, const std::string &file,
     return true;
 }
 
+bool Robot::loadYAMLNode(const std::string& name, const YAML::Node& node)
+{
+    PostProcessYAMLFunction function;
+    return loadYAMLNode(name, node, function);
+}
+
+bool Robot::loadYAMLNode(const std::string& name, const YAML::Node& node, const PostProcessYAMLFunction& function)
+{
+    if (function)
+    {
+        YAML::Node copy = node;
+        if (!function(copy))
+        {
+            RBX_ERROR("Failed to process YAML node.");
+            return false;
+        }
+
+        handler_.loadYAMLtoROS(copy, name);
+    }
+    else
+        handler_.loadYAMLtoROS(node, name);
+
+    return true;
+}
+
 std::string Robot::loadXMLFile(const std::string &file)
 {
     std::string string = IO::loadXMLToString(file);
@@ -344,21 +423,26 @@ void Robot::loadRobotModel(const std::string &description)
     model_ = loader_->getModel();
 }
 
+void Robot::loadKinematics()
+{
+    loader_->loadKinematicsSolvers(kinematics_);
+}
+
 bool Robot::loadKinematics(const std::string &group_name, bool load_subgroups)
 {
-    // Needs to be called first to read the groups defined in the SRDF from the ROS params.
-    robot_model::SolverAllocatorFn allocator = kinematics_->getLoaderFunction(loader_->getSRDF());
-
-    const auto &groups = kinematics_->getKnownGroups();
-    if (groups.empty())
-    {
-        RBX_ERROR("No kinematics plugins defined. Fill and load kinematics.yaml!");
-        return false;
-    }
-
     if (!model_->hasJointModelGroup(group_name))
     {
         RBX_ERROR("No JMG defined for `%s`!", group_name);
+        return false;
+    }
+
+    // Needs to be called first to read the groups defined in the SRDF from the ROS params.
+    robot_model::SolverAllocatorFn allocator = kinematics_->getLoaderFunction(loader_->getSRDF());
+
+    const std::vector<std::string>& groups = kinematics_->getKnownGroups();
+    if (groups.empty())
+    {
+        RBX_ERROR("No kinematics plugins defined. Fill and load kinematics.yaml!");
         return false;
     }
 
@@ -377,7 +461,7 @@ bool Robot::loadKinematics(const std::string &group_name, bool load_subgroups)
 
     auto timeout = kinematics_->getIKTimeout();
 
-    for (const auto &name : load_names)
+    for (const std::string& name : load_names)
     {
         // Check if kinematics have already been loaded for this group.
         if (imap_.find(name) != imap_.end())
@@ -421,7 +505,8 @@ bool Robot::loadKinematics(const std::string &group_name, bool load_subgroups)
 
 void Robot::setSRDFPostProcessAddPlanarJoint(const std::string &name)
 {
-    setSRDFPostProcessFunction([&, name](tinyxml2::XMLDocument &doc) -> bool {
+    setSRDFPostProcessFunction([&, name](tinyxml2::XMLDocument &doc) -> bool
+    {
         tinyxml2::XMLElement *virtual_joint = doc.NewElement("virtual_joint");
         virtual_joint->SetAttribute("name", name.c_str());
         virtual_joint->SetAttribute("type", "planar");
@@ -436,7 +521,8 @@ void Robot::setSRDFPostProcessAddPlanarJoint(const std::string &name)
 
 void Robot::setSRDFPostProcessAddFloatingJoint(const std::string &name)
 {
-    setSRDFPostProcessFunction([&, name](tinyxml2::XMLDocument &doc) -> bool {
+    setSRDFPostProcessFunction([&, name](tinyxml2::XMLDocument &doc) -> bool
+    {
         tinyxml2::XMLElement *virtual_joint = doc.NewElement("virtual_joint");
         virtual_joint->SetAttribute("name", name.c_str());
         virtual_joint->SetAttribute("type", "floating");
@@ -604,11 +690,12 @@ Robot::IKQuery::IKQuery(const std::string &group, const std::string &tip,
 
 Robot::IKQuery::IKQuery(const std::string &group, const std::string &tip,
                         const robot_state::RobotState &start, const RobotPose &offset)
-  : IKQuery(group, start.getGlobalLinkTransform(tip) * offset)
+  : IKQuery(group, tip, start.getGlobalLinkTransform(tip) * offset)
 {
 }
 
 Robot::IKQuery::IKQuery(const std::string &group,   //
+                        const std::string &tip,     //
                         const RobotPose &offset,    //
                         const ScenePtr &scene,      //
                         const std::string &object,  //
@@ -616,15 +703,16 @@ Robot::IKQuery::IKQuery(const std::string &group,   //
   : group(group)
 {
     const auto &pose = scene->getObjectGraspPose(object, offset);
-    addRequest("",                                     //
+    addRequest(tip,                                     //
                Geometry::makeBox(tolerances),          //
                TF::createPoseXYZ(pose.translation()),  //
                Eigen::Quaterniond(pose.rotation()));
 }
 
-Robot::IKQuery::IKQuery(const std::string &group, const RobotPose &pose, double radius,
+Robot::IKQuery::IKQuery(const std::string &group, const std::string &tip, const RobotPose &pose, double radius,
                         const Eigen::Vector3d &tolerance)
   : IKQuery(group,                                //
+            tip,
             pose.translation(),                   //
             Eigen::Quaterniond{pose.rotation()},  //
             radius,                               //
@@ -632,10 +720,11 @@ Robot::IKQuery::IKQuery(const std::string &group, const RobotPose &pose, double 
 {
 }
 
-Robot::IKQuery::IKQuery(const std::string &group,                                                //
+Robot::IKQuery::IKQuery(const std::string &group, const std::string &tip,                         //
                         const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation,  //
                         double radius, const Eigen::Vector3d &tolerance)
   : IKQuery(group,                         //
+            tip,
             Geometry::makeSphere(radius),  //
             TF::createPoseXYZ(position),   //
             orientation,                   //
@@ -643,12 +732,12 @@ Robot::IKQuery::IKQuery(const std::string &group,                               
 {
 }
 
-Robot::IKQuery::IKQuery(const std::string &group, const GeometryConstPtr &region, const RobotPose &pose,
+Robot::IKQuery::IKQuery(const std::string &group, const std::string &tip, const GeometryConstPtr &region, const RobotPose &pose,
                         const Eigen::Quaterniond &orientation, const Eigen::Vector3d &tolerance,
                         const ScenePtr &scene, bool verbose)
   : group(group), scene(scene), verbose(verbose)
 {
-    addRequest("", region, pose, orientation, tolerance);
+    addRequest(tip, region, pose, orientation, tolerance);
 }
 
 Robot::IKQuery::IKQuery(const std::string &group, const moveit_msgs::PositionConstraint &pc,
@@ -813,11 +902,10 @@ void Robot::IKQuery::getMessage(const std::string &base_frame, moveit_msgs::Cons
 kinematic_constraints::KinematicConstraintSetPtr Robot::IKQuery::getAsConstraints(const Robot &robot) const
 {
     moveit_msgs::Constraints msg;
-    const auto &root = robot.getModelConst()->getRootLink()->getName();
-    getMessage(root, msg);
+    getMessage(robot.getSolverBaseFrame(group), msg);
 
     auto constraints = std::make_shared<kinematic_constraints::KinematicConstraintSet>(robot.getModelConst());
-    moveit::core::Transforms none(root);
+    moveit::core::Transforms none(robot.getModelConst()->getModelFrame());
 
     constraints->add(msg, none);
 
@@ -841,12 +929,6 @@ bool Robot::setFromIK(const IKQuery &query)
 
 bool Robot::setFromIK(const IKQuery &query, robot_state::RobotState &state) const
 {
-    // copy query for unconstness
-    std::vector<std::string> tips(query.tips);
-
-    if (tips[0].empty())
-        tips = getSolverTipFrames(query.group);
-
     const robot_model::JointModelGroup *jmg = model_->getJointModelGroup(query.group);
     const auto &gsvcf =
         (query.scene) ? query.scene->getGSVCF(query.verbose) : moveit::core::GroupStateValidityCallbackFn{};
@@ -867,12 +949,19 @@ bool Robot::setFromIK(const IKQuery &query, robot_state::RobotState &state) cons
         query.sampleRegions(targets);
 
 #if ROBOWFLEX_AT_LEAST_MELODIC
-        // Multi-tip IK: Will delegate automatically to RobotState::setFromIKSubgroups() if the kinematics
+        // Multi-tip IK. Will delegate automatically to RobotState::setFromIKSubgroups() if the kinematics
         // solver doesn't support multi-tip queries.
-        success = state.setFromIK(jmg, targets, tips, query.timeout, gsvcf, query.options);
-#else
-        // attempts was a prior field that was deprecated in melodic
-        success = state.setFromIK(jmg, targets, tips, 1, query.timeout, gsvcf, query.options);
+        if (targets.size() > 1)
+            success = state.setFromIK(jmg, targets, query.tips, query.timeout, gsvcf, query.options);
+        // Single-tip IK.
+        else
+            success = state.setFromIK(jmg, targets[0], query.tips[0], query.timeout, gsvcf, query.options);
+
+#else  // attempts was a prior field that was deprecated in melodic
+        if (targets.size() > 1)
+            success = state.setFromIK(jmg, targets, query.tips, 1, query.timeout, gsvcf, query.options);
+        else
+            success = state.setFromIK(jmg, targets[0], query.tips[0], 1, query.timeout, gsvcf, query.options);
 #endif
 
         if (evaluate)
@@ -923,6 +1012,52 @@ bool Robot::setFromIK(const IKQuery &query, robot_state::RobotState &state) cons
     {
         state = *best;
         success = true;
+    }
+
+    state.update();
+    return success;
+}
+
+bool Robot::setFromIKWithoutCollision(const IKQuery &query)
+{
+    return setFromIKWithoutCollision(query, *scratch_);
+}
+
+bool Robot::setFromIKWithoutCollision(const IKQuery &query, robot_state::RobotState &state) const
+{
+    const robot_model::JointModelGroup *jmg = model_->getJointModelGroup(query.group);
+    const auto &gsvcf = (query.scene) ? query.scene->getGSVCF(query.verbose) : moveit::core::GroupStateValidityCallbackFn{};
+
+    bool success = false;
+    RobotPoseVector targets;
+    for (std::size_t i = 0; i < query.attempts and not success; ++i)
+    {
+        // Sample new target poses from regions.
+        query.sampleRegions(targets);
+
+#if ROBOWFLEX_AT_LEAST_MELODIC
+        // Multi-tip IK. Will delegate automatically to RobotState::setFromIKSubgroups() if the kinematics
+        // solver doesn't support multi-tip queries.
+        if (targets.size() > 1)
+            success = state.setFromIK(jmg, targets, query.tips, query.timeout, gsvcf, query.options);
+        // Single-tip IK.
+        else
+            success = state.setFromIK(jmg, targets[0], query.tips[0], query.timeout, gsvcf, query.options);
+#else  // attempts was a prior field that was deprecated in melodic
+        if (targets.size() > 1)
+            success = state.setFromIK(jmg, targets, query.tips, 1, query.timeout, gsvcf, query.options);
+        else
+            success = state.setFromIK(jmg, targets[0], query.tips[0], 1, query.timeout, gsvcf, query.options);
+#endif
+
+        if (success)
+        {
+            state.update();
+            success = (query.scene) ? not query.scene->checkCollision(state).collision : true;
+        }
+
+        if (query.random_restart and not success)
+            state.setToRandomPositions(jmg);
     }
 
     state.update();

@@ -30,11 +30,13 @@ namespace robowflex
          */
         FetchRobot();
 
+        ~FetchRobot() = default;
+
         /** \brief Initialize the robot with arm and arm_with_torso kinematics.
          *  \param[in] addVirtual flag to add virtual joint.
          *  \return True on success, false on failure.
          */
-        bool initialize(bool addVirtual = true);
+        bool initialize(bool addVirtual = false);
 
         /** \brief Inserts the caster links if they don't exist.
          *  \param[in] doc urdf description to be processed.

@@ -11,6 +11,8 @@ set(CMAKE_MODULE_PATH
 include(CompileOptions)
 include(HelperFunctions)
 
+add_definitions(-DBT_USE_DOUBLE_PRECISION)
+
 ##
 ## Non-ROS libraries
 ##
@@ -36,6 +38,7 @@ list(APPEND CATKIN_SOURCES
   object_recognition_msgs
   moveit_msgs
 
+  urdf_to_scene
   roscpp
   rosbag
   urdf
@@ -44,6 +47,7 @@ list(APPEND CATKIN_SOURCES
   geometric_shapes
   moveit_core
   moveit_ros_planning
+  moveit_planners_ompl
   tf2_ros
   xmlrpcpp
   )
@@ -74,7 +78,7 @@ list(APPEND SOURCES
   src/log.cpp
   src/openrave.cpp
   src/io/visualization.cpp
-  src/io/colormap.cpp
+  src/colormap.cpp
   src/io/broadcaster.cpp
   src/io/hdf5.cpp
   src/io/gnuplot.cpp
@@ -124,13 +128,16 @@ add_script(ur5_pool)
 add_script(ur5_visualization)
 add_script(ur5_ik)
 add_script(ur5_cartesian)
-add_script(fetch_test)
 add_script(fetch_chomp)
 add_script(fetch_scenes_visualize)
 add_script(fetch_scenes_benchmark)
 add_script(fetch_benchmark)
 add_script(fetch_visualization)
 add_script(fetch_cartesian)
+add_script(fetch_mobile)
+add_script(fetch_manipulator)
+add_script(fetch_mobile_manipulator)
+add_script(fetch_manipulator_test)
 add_script(wam7_test)
 add_script(wam7_benchmark)
 add_script(resources_visualization)
@@ -140,13 +147,14 @@ add_script(shadowhand_ik)
 add_script(cob4_test)
 add_script(cob4_visualization)
 add_script(cob4_multi_target)
+add_script(urdf_to_scene_visualization)
+add_script(motion_planning_benchmark)
 
 ##
 ## Tests
 ##
 
 add_test_script(robot_scene)
-add_test_script(yaml)
 
 ##
 ## Installation of programs, library, headers, and YAML used by scripts

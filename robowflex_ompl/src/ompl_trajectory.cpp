@@ -22,15 +22,15 @@ OMPL::OMPLTrajectory::OMPLTrajectory(robot_trajectory::RobotTrajectory &trajecto
 ompl::geometric::PathGeometric OMPL::OMPLTrajectory::toOMPLPath(const ompl::geometric::SimpleSetupPtr &ss)
 {
     auto path = ompl::geometric::PathGeometric(ss->getSpaceInformation());
-    auto *tstate = ss->getSpaceInformation()->allocState();
-    auto traj_msg = getMessage();
-
-    // transform to Path geometric
-    for (const auto &state_vec : traj_msg.joint_trajectory.points)
-        for (unsigned int j = 0; j < state_vec.positions.size(); j++)
-            tstate->as<ompl_interface::ModelBasedStateSpace::StateType>()->values[j] = state_vec.positions[j];
-
-    path.append(tstate);
+//    auto *tstate = ss->getSpaceInformation()->allocState();
+//    auto traj_msg = getMessage();
+//
+//    // transform to Path geometric
+//    for (const auto &state_vec : traj_msg.joint_trajectory.points)
+//        for (unsigned int j = 0; j < state_vec.positions.size(); j++)
+//            tstate->as<ompl_interface::ModelBasedStateSpace::StateType>()->values[j] = state_vec.positions[j];
+//
+//    path.append(tstate);
 
     return path;
 }

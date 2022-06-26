@@ -18,6 +18,8 @@
 #include <robowflex_library/io.h>
 #include <robowflex_library/io/bag.h>
 #include <robowflex_library/io/handler.h>
+#include <robowflex_library/io/yaml.h>
+#include <robowflex_library/yaml.h>
 #include <robowflex_library/log.h>
 #include <robowflex_library/macros.h>
 #include <robowflex_library/util.h>
@@ -247,25 +249,34 @@ std::pair<bool, YAML::Node> IO::loadFileToYAML(const std::string &path)
     }
 }
 
-std::pair<bool, std::vector<YAML::Node>> IO::loadAllFromFileToYAML(const std::string &path)
+bool IO::loadFileToYAML(const std::string& path, YAML::Node& node)
 {
-    std::vector<YAML::Node> file;
+    YAML::Node file;
     const std::string full_path = resolvePath(path);
     if (full_path.empty())
-        return std::make_pair(false, file);
+    {
+        RBX_ERROR("Failed to resolve file path `%s`.", path.c_str());
+        return false;
+    }
 
     if (!isExtension(full_path, "yml") && !isExtension(full_path, "yaml"))
-        return std::make_pair(false, file);
+    {
+        RBX_ERROR("YAML wrong extension for path `%s`.", full_path.c_str());
+        return false;
+    }
 
     try
     {
-        return std::make_pair(true, YAML::LoadAllFromFile(full_path));
+        node = YAML::LoadFile(full_path);
     }
-    catch (std::exception &e)
+    catch (std::exception& e)
     {
-        return std::make_pair(false, file);
+        RBX_ERROR("Failed to load YAML file `%s`.", full_path.c_str());
+        return false;
     }
+    return true;
 }
+
 
 bool IO::YAMLToFile(const YAML::Node &node, const std::string &file)
 {
@@ -507,6 +518,58 @@ namespace
 
         throw Exception(1, "Unknown node value in YAML");
     }
+
+    YAML::Node XmlRpcToYAML(const XmlRpc::XmlRpcValue& node)
+    {
+        switch (node.getType())
+        {
+            case XmlRpc::XmlRpcValue::TypeStruct:
+                {
+                    YAML::Node n;
+                    for (XmlRpc::XmlRpcValue::const_iterator it = node.begin(); it != node.end(); ++it)
+                        n[it->first] = XmlRpcToYAML(it->second);
+
+                    return n;
+                }
+            case XmlRpc::XmlRpcValue::TypeArray:
+                {
+                    YAML::Node n;
+                    for (int i = 0; i < node.size(); ++i)
+                        n.push_back(XmlRpcToYAML(node[i]));
+
+                    return n;
+                }
+            case XmlRpc::XmlRpcValue::TypeInt:
+                {
+                    YAML::Node n;
+                    n = static_cast<int>(node);
+                    return n;
+                }
+            case XmlRpc::XmlRpcValue::TypeBoolean:
+                {
+                    YAML::Node n;
+                    n = static_cast<bool>(node);
+                    return n;
+                }
+            case XmlRpc::XmlRpcValue::TypeDouble:
+                {
+                    YAML::Node n;
+                    n = static_cast<double>(node);
+                    return n;
+                }
+            case XmlRpc::XmlRpcValue::TypeString:
+                {
+                    YAML::Node n;
+                    n = static_cast<std::string>(node);
+                    return n;
+                }
+
+            default:
+                throw std::runtime_error("Unknown node type in XmlRpcValue");
+        }
+
+        throw std::runtime_error("Unknown node value in XmlRpcValue");
+    }
 }  // namespace
 
 IO::Handler::Handler(const std::string &name)
@@ -515,7 +578,7 @@ IO::Handler::Handler(const std::string &name)
 }
 
 IO::Handler::Handler(const IO::Handler &handler, const std::string &name)
-  : name_(handler.getName()), namespace_(handler.getNamespace()), nh_(handler.getHandle(), name)
+  : name_(handler.getName() + "/" + name), namespace_(handler.getNamespace() + "/" + name), nh_(handler.getHandle(), name)
 {
 }
 
@@ -534,7 +597,6 @@ void IO::Handler::loadYAMLtoROS(const YAML::Node &node, const std::string &prefi
             const std::string fixed_prefix = (prefix.empty()) ? "" : (prefix + "/");
             for (YAML::const_iterator it = node.begin(); it != node.end(); ++it)
                 loadYAMLtoROS(it->second, fixed_prefix + it->first.as<std::string>());
-
             break;
         }
         case YAML::NodeType::Sequence:
@@ -546,6 +608,15 @@ void IO::Handler::loadYAMLtoROS(const YAML::Node &node, const std::string &prefi
         default:
             throw Exception(1, "Unknown node type in YAML");
     }
+}
+
+void IO::Handler::loadROStoYAML(const std::string& ns, YAML::Node& node)
+{
+    XmlRpc::XmlRpcValue rpc;
+    if (!nh_.getParam(ns, rpc))
+        return;
+
+    node = XmlRpcToYAML(rpc);
 }
 
 bool IO::Handler::hasParam(const std::string &key) const
@@ -567,3 +638,98 @@ const std::string &IO::Handler::getNamespace() const
 {
     return namespace_;
 }
+
+///
+/// IO::YAML
+///
+
+namespace robowflex
+{
+    namespace IO
+    {
+        bool isNode(const YAML::Node &node)
+        {
+            bool r = true;
+            try
+            {
+                r = !node.IsNull();
+                r = node;
+
+                if (r)
+                    try
+                    {
+                        r = node.as<std::string>() != "~";
+                    }
+                    catch (std::exception &e)
+                    {
+                    }
+            }
+            catch (YAML::InvalidNode &e)
+            {
+                return false;
+            }
+
+            return r;
+        }
+
+        moveit_msgs::RobotState robotStateFromNode(const YAML::Node &node)
+        {
+            return node.as<moveit_msgs::RobotState>();
+        }
+
+        YAML::Node toNode(const geometry_msgs::Pose &msg)
+        {
+            YAML::Node node;
+            node = msg;
+            return node;
+        }
+
+        geometry_msgs::Pose poseFromNode(const YAML::Node &node)
+        {
+            return node.as<geometry_msgs::Pose>();
+        }
+
+        YAML::Node toNode(const moveit_msgs::PlanningScene &msg)
+        {
+            YAML::Node node;
+            node = msg;
+            return node;
+        }
+
+        YAML::Node toNode(const moveit_msgs::MotionPlanRequest &msg)
+        {
+            YAML::Node node;
+            node = msg;
+            return node;
+        }
+
+        YAML::Node toNode(const moveit_msgs::RobotTrajectory &msg)
+        {
+            YAML::Node node;
+            node = msg;
+            return node;
+        }
+
+        YAML::Node toNode(const moveit_msgs::RobotState &msg)
+        {
+            YAML::Node node;
+            node = msg;
+            return node;
+        }
+
+        bool fromYAMLFile(moveit_msgs::PlanningScene &msg, const std::string &file)
+        {
+            return IO::YAMLFileToMessage(msg, file);
+        }
+
+        bool fromYAMLFile(moveit_msgs::MotionPlanRequest &msg, const std::string &file)
+        {
+            return IO::YAMLFileToMessage(msg, file);
+        }
+
+        bool fromYAMLFile(moveit_msgs::RobotState &msg, const std::string &file)
+        {
+            return IO::YAMLFileToMessage(msg, file);
+        }
+    }  // namespace IO
+}  // namespace robowflex

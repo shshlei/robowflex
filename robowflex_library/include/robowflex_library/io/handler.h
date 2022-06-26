@@ -44,6 +44,8 @@ namespace robowflex
              */
             void loadYAMLtoROS(const YAML::Node &node, const std::string &prefix = "");
 
+            void loadROStoYAML(const std::string& ns, YAML::Node& node);
+
             /** \brief Sets a parameter on the parameter server.
              *  \param[in] key Key to store parameter under.
              *  \param[in] value Value to store.

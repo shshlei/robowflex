@@ -67,7 +67,7 @@ namespace robowflex
             bool active_{false};                   ///< Is thread active?
             bool done_{false};                     ///< Is thread done?
             unsigned int rate_{10};                ///< Times per second to send out.
-            std::unique_ptr<std::thread> thread_;  ///< Worker thread.
+            std::thread thread_;  ///< Worker thread.
             ros::NodeHandle nh_;                   ///< Handle for publishing.
             tf2_ros::TransformBroadcaster tf2br_;  ///< TF2 broadcaster
             ros::Publisher state_pub_;             ///< State publisher.

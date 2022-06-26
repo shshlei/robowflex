@@ -37,7 +37,8 @@ IO::RobotBroadcaster::~RobotBroadcaster()
 void IO::RobotBroadcaster::start()
 {
     active_ = true;
-    thread_.reset(new std::thread([&]() {
+    thread_ = std::thread([&]
+    {
         done_ = false;
 
         while (active_)
@@ -49,12 +50,13 @@ void IO::RobotBroadcaster::start()
         }
 
         done_ = true;
-    }));
+    });
 }
 
 void IO::RobotBroadcaster::stop()
 {
     active_ = false;
+    thread_.join();
 }
 
 void IO::RobotBroadcaster::addStaticTransform(const std::string &name, const std::string &base,

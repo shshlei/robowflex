@@ -5,6 +5,7 @@
 #include <robowflex_library/geometry.h>
 #include <robowflex_library/io.h>
 #include <robowflex_library/io/yaml.h>
+#include <robowflex_library/yaml.h>
 #include <robowflex_library/log.h>
 #include <robowflex_library/macros.h>
 #include <robowflex_library/openrave.h>
@@ -16,6 +17,8 @@
 #include <moveit/collision_detection/collision_plugin.h>
 #include <moveit/robot_state/conversions.h>
 #include <pluginlib/class_loader.h>
+
+#include <urdf_to_scene/scene_parser.h>
 
 // Macro to check for function existence
 #include <boost/tti/has_member_function.hpp>
@@ -170,6 +173,16 @@ ScenePtr Scene::deepCopy() const
     return scene;
 }
 
+const std::string Scene::getName() const
+{
+    return scene_->getName();
+}
+
+void Scene::setName(const std::string name)
+{
+    scene_->setName(name);
+}
+
 const planning_scene::PlanningScenePtr &Scene::getSceneConst() const
 {
     return scene_;
@@ -272,13 +285,7 @@ RobotPose Scene::getObjectPose(const std::string &name) const
     const auto &world = scene_->getWorldNonConst();
     const auto &obj = world->getObject(name);
     if (obj)
-    {
-#if ROBOWFLEX_MOVEIT_VERSION >= ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 6)
-        return obj->pose_ * obj->shape_poses_[0];
-#else
         return obj->shape_poses_[0];
-#endif
-    }
 
     return RobotPose::Identity();
 }
@@ -355,7 +362,22 @@ bool Scene::setCollisionDetector(const std::string &detector_name) const
     return success;
 }
 
-bool Scene::attachObjectToState(robot_state::RobotState &state, const std::string &name) const
+bool Scene::attachObject(const std::string &name)
+{
+    const auto &robot = getCurrentState().getRobotModel();
+    const auto &ee = robot->getEndEffectors();
+
+    // One end-effector
+    if (ee.size() == 1)
+    {
+        const auto &links = ee[0]->getLinkModelNames();
+        return attachObject(name, links[0], links);
+    }
+
+    return false;
+}
+
+bool Scene::attachObject(robot_state::RobotState &state, const std::string &name)
 {
     const auto &robot = state.getRobotModel();
     const auto &ee = robot->getEndEffectors();
@@ -364,16 +386,24 @@ bool Scene::attachObjectToState(robot_state::RobotState &state, const std::strin
     if (ee.size() == 1)
     {
         const auto &links = ee[0]->getLinkModelNames();
-        return attachObjectToState(state, name, links[0], links);
+        return attachObject(state, name, links[0], links);
     }
 
     return false;
 }
 
-bool Scene::attachObjectToState(robot_state::RobotState &state, const std::string &name,
-                                const std::string &ee_link, const std::vector<std::string> &touch_links) const
+bool Scene::attachObject(const std::string &name, const std::string &ee_link,
+                         const std::vector<std::string> &touch_links)
 {
-    const auto &world = scene_->getWorld();
+    return attachObject(getCurrentState(), name, ee_link, touch_links);
+}
+
+bool Scene::attachObject(robot_state::RobotState &state, const std::string &name, const std::string &ee_link,
+                         const std::vector<std::string> &touch_links)
+{
+    incrementVersion();
+
+    const auto &world = scene_->getWorldNonConst();
     if (!world->hasObject(name))
     {
         RBX_ERROR("World does not have object `%s`", name);
@@ -387,11 +417,17 @@ bool Scene::attachObjectToState(robot_state::RobotState &state, const std::strin
         return false;
     }
 
+    if (!world->removeObject(name))
+    {
+        RBX_ERROR("Could not remove object `%s`", name);
+        return false;
+    }
+
     const auto &tf = state.getGlobalLinkTransform(ee_link);
 
     RobotPoseVector poses;
     for (const auto &pose : obj->shape_poses_)
-        poses.push_back(tf.inverse() * pose);
+        poses.push_back(tf.inverse() * obj->pose_ * pose);
 
     std::set<std::string> touch_links_set(touch_links.begin(), touch_links.end());
     auto *body = attachObjectHelper<moveit::core::AttachedBody>(state.getLinkModel(ee_link),  //
@@ -402,34 +438,6 @@ bool Scene::attachObjectToState(robot_state::RobotState &state, const std::strin
     state.attachBody(body);
 
     return true;
-}
-
-bool Scene::attachObject(const std::string &name)
-{
-    return attachObject(getCurrentState(), name);
-}
-
-bool Scene::attachObject(robot_state::RobotState &state, const std::string &name)
-{
-    if (attachObjectToState(state, name))
-    {
-        removeCollisionObject(name);
-        return true;
-    }
-
-    return false;
-}
-
-bool Scene::attachObject(robot_state::RobotState &state, const std::string &name, const std::string &ee_link,
-                         const std::vector<std::string> &touch_links)
-{
-    if (attachObjectToState(state, name, ee_link, touch_links))
-    {
-        removeCollisionObject(name);
-        return true;
-    }
-
-    return false;
 }
 
 bool Scene::hasObject(const std::string &name) const
@@ -481,11 +489,35 @@ double Scene::distanceToCollision(const robot_state::RobotState &state) const
     return scene_->distanceToCollision(state);
 }
 
-double Scene::distanceACM(const robot_state::RobotState &state,
-                          const collision_detection::AllowedCollisionMatrix &acm) const
+double Scene::distanceToObject(const robot_state::RobotState &state, const std::string &object) const
 {
+    if (not hasObject(object))
+    {
+        RBX_ERROR("World does not have object `%s`", object);
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
     collision_detection::DistanceRequest req;
     collision_detection::DistanceResult res;
+
+    const auto &links = state.getRobotModel()->getLinkModelNames();
+    const auto &objs = getCollisionObjects();
+
+    collision_detection::AllowedCollisionMatrix acm;
+
+    // No self-collision distances
+    for (unsigned int i = 0; i < links.size(); ++i)
+        for (unsigned int j = i + 1; j < links.size(); ++j)
+            acm.setEntry(links[i], links[j], true);
+
+    // Ignore all other objects
+    for (const auto &link : links)
+        for (const auto &obj : objs)
+            acm.setEntry(link, obj, true);
+
+    // Enable collision to the object of interest
+    for (const auto &link : links)
+        acm.setEntry(link, object, false);
 
     req.acm = &acm;
 
@@ -497,48 +529,11 @@ double Scene::distanceACM(const robot_state::RobotState &state,
     return res.minimum_distance.distance;
 }
 
-void Scene::clearACM(collision_detection::AllowedCollisionMatrix &acm) const
-{
-    const auto &links = getCurrentStateConst().getRobotModel()->getLinkModelNames();
-    const auto &objs = getCollisionObjects();
-
-    // No self-collision distances
-    for (unsigned int i = 0; i < links.size(); ++i)
-        for (unsigned int j = i + 1; j < links.size(); ++j)
-            acm.setEntry(links[i], links[j], true);
-
-    // No obstacle collisions
-    for (unsigned int i = 0; i < objs.size(); ++i)
-        for (unsigned int j = i + 1; j < objs.size(); ++j)
-            acm.setEntry(objs[i], objs[j], true);
-
-    // Ignore all other objects
-    for (const auto &link : links)
-        for (const auto &obj : objs)
-            acm.setEntry(link, obj, true);
-}
-
-double Scene::distanceToObject(const robot_state::RobotState &state, const std::string &object) const
-{
-    if (not hasObject(object))
-    {
-        RBX_ERROR("World does not have object `%s`", object);
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-
-    collision_detection::AllowedCollisionMatrix acm;
-    clearACM(acm);
-
-    // Enable collision to the object of interest
-    for (const auto &link : getCurrentStateConst().getRobotModel()->getLinkModelNames())
-        acm.setEntry(link, object, false);
-
-    return distanceACM(state, acm);
-}
-
 double Scene::distanceBetweenObjects(const std::string &one, const std::string &two) const
 {
-    if (one == two)  // Early terminate if they are the same
+#if ROBOWFLEX_MOVEIT_VERSION <= ROBOWFLEX_MOVEIT_VERSION_COMPUTE(1, 1, 0)
+    // Early terminate if they are the same
+    if (one == two)
         return 0.;
 
     if (not hasObject(one))
@@ -553,15 +548,27 @@ double Scene::distanceBetweenObjects(const std::string &one, const std::string &
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    robot_state::RobotState copy = getCurrentStateConst();
-    attachObjectToState(copy, one);
+    const auto &cw = scene_->getCollisionWorld();
 
-    collision_detection::AllowedCollisionMatrix acm;
-    clearACM(acm);
-    acm.setEntry(one, one, true);
+    collision_detection::DistanceRequest req;
+    collision_detection::DistanceResult res;
+
+    const auto &objs = getCollisionObjects();
+
+    // Allow collisions between all other objects
+    collision_detection::AllowedCollisionMatrix acm(objs, true);
+    req.acm = &acm;
+
+    // But disable them for the two we care about
     acm.setEntry(one, two, false);
 
-    return distanceACM(copy, acm);
+    cw->distanceWorld(req, res, *cw);
+    return res.minimum_distance.distance;
+
+#else
+    throw Exception(1, "Not Implemented");
+
+#endif
 }
 
 moveit::core::GroupStateValidityCallbackFn Scene::getGSVCF(bool verbose) const
@@ -610,6 +617,67 @@ bool Scene::fromYAMLFile(const std::string &file)
         getACM() = acm;
 
     return true;
+}
+
+bool Scene::fromYAMLNode(const YAML::Node& node)
+{
+    moveit_msgs::PlanningScene msg;
+
+    msg = node.as<moveit_msgs::PlanningScene>();
+
+    // Add robot_state if loaded scene does not contain one.
+    if (msg.robot_state.joint_state.position.empty())
+        moveit::core::robotStateToRobotStateMsg(scene_->getCurrentState(), msg.robot_state);
+
+    auto acm(getACM());
+    useMessage(msg);
+
+    // Update ACM only if anything specified.
+    if (msg.allowed_collision_matrix.entry_names.empty())
+        getACM() = acm;
+
+    return true;
+}
+
+bool Scene::fromURDFString(const std::string& str)
+{
+    moveit_msgs::PlanningScene msg;
+
+    SceneParser parser;
+    if (!parser.loadURDF(str))
+        return false;
+
+    parser.parseURDF();
+
+    const auto& ps = parser.getPlanningScene();
+    msg.world.collision_objects = ps.world.collision_objects;
+    msg.fixed_frame_transforms = ps.fixed_frame_transforms;
+
+    // Store mesh resources for possible conversion
+    const auto& resource_map = parser.getMeshResourceMap();
+    mesh_resources_ = resource_map;
+
+    // Add robot_state if loaded scene does not contain one.
+    if (msg.robot_state.joint_state.position.empty())
+        moveit::core::robotStateToRobotStateMsg(scene_->getCurrentState(), msg.robot_state);
+
+    auto acm(getACM());
+    useMessage(msg);
+
+    // Update ACM only if anything specified.
+    if (msg.allowed_collision_matrix.entry_names.empty())
+        getACM() = acm;
+
+    return true;
+}
+
+bool Scene::fromURDFFile(const std::string& file)
+{
+    auto xml_str = IO::loadXMLToString(file);
+    if (xml_str.empty())
+        return false;
+
+    return fromURDFString(xml_str);
 }
 
 bool Scene::fromOpenRAVEXMLFile(const std::string &file, std::string models_dir)

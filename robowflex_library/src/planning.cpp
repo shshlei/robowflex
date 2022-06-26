@@ -1,6 +1,7 @@
 /* Author: Zachary Kingston */
 
 #include <moveit/robot_state/conversions.h>
+#include <moveit/ompl_interface/model_based_planning_context.h>
 
 #include <robowflex_library/io.h>
 #include <robowflex_library/log.h>
@@ -281,9 +282,15 @@ bool OMPL::loadOMPLConfig(IO::Handler &handler, const std::string &config_file,
         return false;
     }
 
-    handler.loadYAMLtoROS(config.second);
+    return loadOMPLConfig(handler, config.second, configs);
+}
 
-    const auto &planner_configs = config.second["planner_configs"];
+bool OMPL::loadOMPLConfig(IO::Handler &handler, const YAML::Node& node,
+                          std::vector<std::string> &configs)
+{
+    handler.loadYAMLtoROS(node);
+
+    const auto &planner_configs = node["planner_configs"];
     if (planner_configs)
     {
         for (YAML::const_iterator it = planner_configs.begin(); it != planner_configs.end(); ++it)
@@ -330,6 +337,25 @@ void OMPL::Settings::setParam(IO::Handler &handler) const
     handler.setParam(prefix + "maximum_waypoint_distance", maximum_waypoint_distance);
 }
 
+bool OMPL::Settings::fromYAMLNode(const YAML::Node& node)
+{
+    max_goal_samples = node["max_goal_samples"].as<int>();
+    max_goal_sampling_attempts = node["max_goal_sampling_attempts"].as<int>();
+    max_planning_threads = node["max_planning_threads"].as<int>();
+    max_solution_segment_length = node["max_solution_segment_length"].as<double>();
+    max_state_sampling_attempts = node["max_state_sampling_attempts"].as<int>();
+    minimum_waypoint_count = node["minimum_waypoint_count"].as<int>();
+    simplify_solutions = node["simplify_solutions"].as<bool>();
+    hybridize_solutions = node["hybridize_solutions"].as<bool>();
+    interpolate_solutions = node["interpolate_solutions"].as<bool>();
+    use_constraints_approximations = node["use_constraints_approximations"].as<bool>();
+    display_random_valid_states = node["display_random_valid_states"].as<bool>();
+    link_for_exploration_tree = node["link_for_exploration_tree"].as<std::string>();
+    maximum_waypoint_distance = node["maximum_waypoint_distance"].as<double>();
+
+    return true;
+}
+
 ///
 /// OMPL::PipelinePlanner
 ///
@@ -352,7 +378,24 @@ bool OMPL::OMPLPipelinePlanner::initialize(const std::string &config_file, const
                                            const std::string &plugin,
                                            const std::vector<std::string> &adapters)
 {
-    if (!loadOMPLConfig(handler_, config_file, configs_))
+    if (config_file.empty())
+        return false;
+
+    const auto &config = IO::loadFileToYAML(config_file);
+    if (!config.first)
+    {
+        RBX_ERROR("Failed to load planner configs.");
+        return false;
+    }
+
+    return initialize(config.second, settings, plugin, adapters);
+}
+
+bool OMPL::OMPLPipelinePlanner::initialize(const YAML::Node& node, const OMPL::Settings &settings,
+                                           const std::string &plugin,
+                                           const std::vector<std::string> &adapters)
+{
+    if (!loadOMPLConfig(handler_, node, configs_))
         return false;
 
     handler_.setParam("planning_plugin", plugin);
@@ -373,6 +416,14 @@ bool OMPL::OMPLPipelinePlanner::initialize(const std::string &config_file, const
 
     return true;
 }
+
+/*
+std::map<std::string, Planner::ProgressProperty> OMPL::OMPLPipelinePlanner::getProgressProperties(const SceneConstPtr &scene, const planning_interface::MotionPlanRequest &request) const
+{
+    auto pc = extractPlanningContext<ompl_interface::ModelBasedPlanningContext>(scene, request);
+    return pc->getOMPLSimpleSetup()->getPlanner()->getPlannerProgressProperties();
+}
+*/
 
 std::vector<std::string> OMPL::OMPLPipelinePlanner::getPlannerConfigs() const
 {
@@ -396,6 +447,13 @@ bool opt::loadConfig(IO::Handler &handler, const std::string &config_file)
     }
 
     handler.loadYAMLtoROS(config.second);
+
+    return true;
+}
+
+bool opt::loadConfig(IO::Handler &handler, const YAML::Node &node)
+{
+    handler.loadYAMLtoROS(node);
 
     return true;
 }
@@ -471,6 +529,41 @@ void opt::CHOMPSettings::setParam(IO::Handler &handler) const
     handler.setParam(prefix + "start_state_max_bounds_error", start_state_max_bounds_error);
 }
 
+bool opt::CHOMPSettings::fromYAMLNode(const YAML::Node& node)
+{
+    planning_time_limit = node["planning_time_limit"].as<double>();
+    max_iterations = node["max_iterations"].as<int>();
+    max_iterations_after_collision_free = node["max_iterations_after_collision_free"].as<int>();
+    smoothness_cost_weight = node["smoothness_cost_weight"].as<double>();
+    obstacle_cost_weight = node["obstacle_cost_weight"].as<double>();
+    learning_rate = node["learning_rate"].as<double>();
+    animate_path = node["animate_path"].as<bool>();
+    add_randomness = node["add_randomness"].as<bool>();
+    smoothness_cost_velocity = node["smoothness_cost_velocity"].as<double>();
+    smoothness_cost_acceleration = node["smoothness_cost_acceleration"].as<double>();
+    smoothness_cost_jerk = node["smoothness_cost_jerk"].as<double>();
+    hmc_discretization = node["hmc_discretization"].as<double>();
+    hmc_stochasticity = node["hmc_stochasticity"].as<double>();
+    hmc_annealing_factor = node["hmc_annealing_factor"].as<double>();
+    use_hamiltonian_monte_carlo = node["use_hamiltonian_monte_carlo"].as<bool>();
+    ridge_factor = node["ridge_factor"].as<double>();
+    use_pseudo_inverse = node["use_pseudo_inverse"].as<bool>();
+    pseudo_inverse_ridge_factor = node["pseudo_inverse_ridge_factor"].as<double>();
+    animate_endeffector = node["animate_endeffector"].as<bool>();
+    animate_endeffector_segment = node["animate_endeffector_segment"].as<std::string>();
+    joint_update_limit = node["joint_update_limit"].as<double>();
+    collision_clearence = node["collision_clearence"].as<double>();
+    collision_threshold = node["collision_threshold"].as<double>();
+    random_jump_amount = node["random_jump_amount"].as<double>();
+    use_stochastic_descent = node["use_stochastic_descent"].as<bool>();
+    enable_failure_recovery = node["enable_failure_recovery"].as<bool>();
+    max_recovery_attempts = node["max_recovery_attempts"].as<int>();
+    trajectory_initialization_method = node["trajectory_initialization_method"].as<std::string>();
+    start_state_max_bounds_error = node["start_state_max_bounds_error"].as<double>();
+
+    return true;
+}
+
 ///
 /// opt::CHOMPPipelinePlanner
 ///
@@ -501,6 +594,15 @@ bool opt::CHOMPPipelinePlanner::initialize(const std::string &config_file, const
                                            const std::vector<std::string> &adapters)
 {
     if (!loadConfig(handler_, config_file))
+        return false;
+
+    return finishInitialize(plugin, adapters);
+}
+
+bool opt::CHOMPPipelinePlanner::initialize(const YAML::Node &node, const std::string &plugin,
+                                           const std::vector<std::string> &adapters)
+{
+    if (!loadConfig(handler_, node))
         return false;
 
     return finishInitialize(plugin, adapters);
@@ -553,7 +655,23 @@ opt::TrajOptPipelinePlanner::TrajOptPipelinePlanner(const RobotPtr &robot, const
 bool opt::TrajOptPipelinePlanner::initialize(const std::string &config_file, const std::string &plugin,
                                              const std::vector<std::string> &adapters)
 {
-    if (!loadConfig(handler_, config_file))
+    if (config_file.empty())
+        return false;
+
+    const auto &config = IO::loadFileToYAML(config_file);
+    if (!config.first)
+    {
+        RBX_ERROR("Failed to load planner configs.");
+        return false;
+    }
+
+    return initialize(config.second, plugin, adapters);
+}
+
+bool opt::TrajOptPipelinePlanner::initialize(const YAML::Node &node, const std::string &plugin,
+                                             const std::vector<std::string> &adapters)
+{
+    if (!loadConfig(handler_, node))
         return false;
 
     handler_.setParam("planning_plugin", plugin);
@@ -572,4 +690,9 @@ bool opt::TrajOptPipelinePlanner::initialize(const std::string &config_file, con
                                                             "planning_plugin", "request_adapters"));
 
     return true;
+}
+
+std::vector<std::string> opt::TrajOptPipelinePlanner::getPlannerConfigs() const
+{
+    return configs_;
 }

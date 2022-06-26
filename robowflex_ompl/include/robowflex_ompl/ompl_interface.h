@@ -51,6 +51,8 @@ namespace robowflex
              */
             bool initialize(const std::string &config_file = "", const OMPL::Settings settings = Settings());
 
+            bool initialize(const YAML::Node &node, const OMPL::Settings settings = Settings());
+
             /** \brief Plan a motion given a \a request and a \a scene.
              *  Uses the planning pipeline's generatePlan() method, which goes through planning adapters.
              *  \param[in] scene A planning scene for the same \a robot_ to compute the plan in.

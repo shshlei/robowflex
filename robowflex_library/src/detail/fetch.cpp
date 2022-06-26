@@ -15,13 +15,13 @@ const std::string FetchRobot::DEFAULT_KINEMATICS{"package://fetch_moveit_config/
 const std::string  //
     OMPL::FetchOMPLPipelinePlanner::DEFAULT_CONFIG{"package://fetch_moveit_config/config/ompl_planning.yaml"};
 
-const std::string FetchRobot::RESOURCE_URDF{"package://robowflex_resources/fetch/robots/fetch.urdf"};
-const std::string FetchRobot::RESOURCE_SRDF{"package://robowflex_resources/fetch/config/fetch.srdf"};
-const std::string FetchRobot::RESOURCE_LIMITS{"package://robowflex_resources/fetch/config/joint_limits.yaml"};
+const std::string FetchRobot::RESOURCE_URDF{"package://robowflex_resources/robots/fetch/robots/fetch.urdf"};
+const std::string FetchRobot::RESOURCE_SRDF{"package://robowflex_resources/robots/fetch/config/fetch.srdf"};
+const std::string FetchRobot::RESOURCE_LIMITS{"package://robowflex_resources/robots/fetch/config/joint_limits.yaml"};
 const std::string  //
-    FetchRobot::RESOURCE_KINEMATICS{"package://robowflex_resources/fetch/config/kinematics.yaml"};
+    FetchRobot::RESOURCE_KINEMATICS{"package://robowflex_resources/robots/fetch/config/kinematics.yaml"};
 const std::string  //
-    OMPL::FetchOMPLPipelinePlanner::RESOURCE_CONFIG{"package://robowflex_resources/fetch/config/"
+    OMPL::FetchOMPLPipelinePlanner::RESOURCE_CONFIG{"package://robowflex_resources/robots/fetch/config/"
                                                     "ompl_planning.yaml"};
 
 FetchRobot::FetchRobot() : Robot("fetch")
@@ -31,7 +31,7 @@ FetchRobot::FetchRobot() : Robot("fetch")
 bool FetchRobot::initialize(bool addVirtual)
 {
     if (addVirtual)
-        setSRDFPostProcessAddPlanarJoint("base_joint");
+        setSRDFPostProcessAddPlanarJoint("virtual_joint");
 
     setURDFPostProcessFunction([this](tinyxml2::XMLDocument &doc) { return addCastersURDF(doc); });
 
@@ -49,8 +49,7 @@ bool FetchRobot::initialize(bool addVirtual)
         success = Robot::initialize(RESOURCE_URDF, RESOURCE_SRDF, RESOURCE_LIMITS, RESOURCE_KINEMATICS);
     }
 
-    loadKinematics("arm");
-    loadKinematics("arm_with_torso");
+    loadKinematics();
 
     FetchRobot::openGripper();
 
@@ -121,16 +120,16 @@ void FetchRobot::closeGripper()
 
 void FetchRobot::setBasePose(double x, double y, double theta)
 {
-    if (hasJoint("base_joint/x") && hasJoint("base_joint/y") && hasJoint("base_joint/theta"))
+    if (hasJoint("virtual_joint/x") && hasJoint("virtual_joint/y") && hasJoint("virtual_joint/theta"))
     {
         const std::map<std::string, double> pose = {
-            {"base_joint/x", x}, {"base_joint/y", y}, {"base_joint/theta", theta}};
+            {"virtual_joint/x", x}, {"virtual_joint/y", y}, {"virtual_joint/theta", theta}};
 
         scratch_->setVariablePositions(pose);
         scratch_->update();
     }
     else
-        RBX_WARN("base_joint does not exist, cannot move base! You need to set addVirtual to true");
+        RBX_WARN("virtual_joint does not exist, cannot move base! You need to set addVirtual to true");
 }
 
 OMPL::FetchOMPLPipelinePlanner::FetchOMPLPipelinePlanner(const RobotPtr &robot, const std::string &name)

@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     experiment.addQuery("joint", scene, planner, joint_request);
     experiment.addQuery("pose", scene, planner, pose_request);
 
-    auto dataset = experiment.benchmark(4);
+    auto dataset = experiment.benchmark();
 
     OMPLPlanDataSetOutputter output("robowflex_ur5_demo");
     output.dump(*dataset);

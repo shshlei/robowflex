@@ -10,6 +10,12 @@
 #include <robowflex_library/id.h>
 #include <robowflex_library/geometry.h>
 #include <robowflex_library/robot.h>
+#include <robowflex_library/scene.h>
+#include <robowflex_library/planning.h>
+#include <robowflex_library/benchmarking.h>
+#include <robowflex_library/io/yaml.h>
+#include <robowflex_library/io.h>
+#include <robowflex_library/yaml.h>
 
 namespace robowflex
 {
@@ -431,6 +437,8 @@ namespace robowflex
          */
         bool fromYAMLFile(const std::string &file);
 
+        bool fromYAMLNode(const YAML::Node& node);
+
         /** \} */
 
     private:
@@ -444,6 +452,164 @@ namespace robowflex
         planning_interface::MotionPlanRequest request_;  ///< The build request.
 
         static const std::string DEFAULT_CONFIG;  ///< Default planner configuration to use
+    };
+
+    class Builder
+    {
+    public:
+        Builder() = default;
+        virtual ~Builder();
+
+        virtual void reset();
+
+        // Load sequence or unique resource/s into a YAML node map
+        void loadResources(const YAML::Node& node);
+
+        //  Decode resource/s tag into a YAML node. A resource tag can be a
+        //   - File (YAML, XML, XACRO)
+        //   - ROS Parameter namespace
+        //   - YAML node
+        void decodeResourceTag(const YAML::Node& source, YAML::Node& target);
+
+        // Merge supplied node to specific/all resources in the map
+        void mergeResource(const std::string& name, const YAML::Node& node);
+        void mergeResources(const YAML::Node& node);
+
+        // Clone resource and merge given node. A sequence number is added to the cloned resource name.
+        // The original resource is deleted.
+        //  Ex. 2 extensions targetting resource 'A' will create resource 'A1' and 'A2', resource 'A' is deleted.
+        void extendResources(const YAML::Node& node);
+        bool cloneResource(const std::string& src, const std::string& dst);
+        bool deleteResource(const std::string& name);
+
+        // In case a validation is needed
+        virtual bool validateResource(const YAML::Node& node);  // defaults to true
+
+    protected:
+        void loadResource(const YAML::Node& node);
+        void extendResource(const YAML::Node& node, std::vector<std::string>& resource_names);
+
+        const std::map<std::string, YAML::Node>& getResources() const;
+        void insertResource(const std::string, const YAML::Node& node);
+
+        // Decode a node with the template type and encode to a node and check if the original is a subset
+        template <typename T>
+        bool validateYamlNode(const YAML::Node& source)
+        {
+            try
+            {
+                // Decode YAML node
+                const auto& t = source.as<T>();
+
+                // Encode decoded message
+                YAML::Node target;
+                target = t;
+
+                // Compare nodes to find if everything has been converted correctly
+                if (yaml::isSubset(source, target))
+                    return true;
+            }
+            catch (const YAML::Exception& e)
+            {
+                ROS_ERROR("YAML decode exception: %s", e.what());
+                return false;
+            }
+
+            return false;
+        }
+
+    private:
+        std::map<std::string, YAML::Node> node_map_;
+    };
+
+    /// Builds any object that can be deserialized with YAML
+    template <typename T>
+    class YAMLDeserializerBuilder : public Builder
+    {
+    public:
+        YAMLDeserializerBuilder(bool use_validation = true) : use_validation_(use_validation){}
+
+        ~YAMLDeserializerBuilder() override = default;
+
+        virtual bool validateResource(const YAML::Node& node) override
+        {
+            if (use_validation_)
+                return validateYamlNode<T>(node["resource"]);
+            return true;
+        }
+
+        T generateResult() const
+        {
+            T request;
+            const auto& node_map = getResources();
+
+            request = node_map.begin()->second["resource"].template as<T>();
+
+            return request;
+        }
+
+        std::map<std::string, T> generateResults() const
+        {
+            std::map<std::string, T> requests;
+            const auto& node_map = getResources();
+
+            // Decode nodes
+            for (const auto& resource : node_map)
+                requests.insert({ resource.first, resource.second["resource"].template as<T>() });
+
+            return requests;
+        }
+
+    private:
+        bool use_validation_;
+    };
+
+    // Build robowflex_library/Robot with complex initializations
+    class RobotBuilder : public Builder
+    {
+    public:
+        RobotBuilder() = default;
+        ~RobotBuilder() override = default;
+
+        RobotPtr generateResult() const;
+
+        std::map<std::string, RobotPtr> generateResults() const;
+    };
+
+    // Build robowflex_library/Scene with complex initializations
+    class SceneBuilder : public Builder
+    {
+    public:
+        SceneBuilder() = default;
+        ~SceneBuilder() override = default;
+
+        ScenePtr generateResult(const RobotPtr& robot, const std::string& collision_detector) const;
+
+        std::map<std::string, ScenePtr> generateResults(const RobotPtr& robot, const std::string& collision_detector) const;
+    };
+
+    // Build robowflex_library/Planner with complex initializations
+    class PipelinePlannerBuilder : public Builder
+    {
+    public:
+        PipelinePlannerBuilder() = default;
+        ~PipelinePlannerBuilder() override = default;
+
+        PipelinePlannerPtr generateResult(const RobotPtr& robot) const;
+
+        std::map<std::string, PipelinePlannerPtr> generateResults(const RobotPtr& robot) const;
+    };
+
+    // Build robowflex_library/Benchmark with complex initializations
+    class BenchmarkBuilder : public Builder
+    {
+    public:
+        BenchmarkBuilder() = default;
+        ~BenchmarkBuilder() override = default;
+
+        ExperimentPtr generateResult() const;
+
+        std::map<std::string, ExperimentPtr> generateResults() const;
     };
 }  // namespace robowflex
 

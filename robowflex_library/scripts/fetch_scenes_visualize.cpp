@@ -4,6 +4,7 @@
 #include <robowflex_library/builder.h>
 #include <robowflex_library/detail/fetch.h>
 #include <robowflex_library/io/visualization.h>
+#include <robowflex_library/io/broadcaster.h>
 #include <robowflex_library/log.h>
 #include <robowflex_library/scene.h>
 #include <robowflex_library/util.h>
@@ -34,12 +35,13 @@ int main(int argc, char **argv)
     // Create an RViz visualization helper.
     // Publishes all topics and parameter under `/robowflex` by default.
     IO::RVIZHelper rviz(fetch);
+    IO::RobotBroadcaster bc(fetch);
+    bc.start();
 
     RBX_INFO("RViz Initialized! Press enter to continue (after your RViz is setup)...");
-    std::cin.get();
 
     const int start = 1;
-    const int end = 10;
+    const int end = 1;
     for (int i = start; i <= end; i++)
     {
         const auto &is = std::to_string(i);
@@ -56,6 +58,8 @@ int main(int argc, char **argv)
             RBX_ERROR("Failed to read file: %s for scene", scene_file);
             continue;
         }
+//        scene->setCollisionDetector("Bullet");
+//        scene->getScene()->setContactDistanceThreshold(0.05);
 
         // Create the default planner for the Fetch.
         auto planner = std::make_shared<OMPL::FetchOMPLPipelinePlanner>(fetch, "default");
@@ -68,21 +72,25 @@ int main(int argc, char **argv)
             RBX_ERROR("Failed to read file: %s for request", request_file);
             continue;
         }
+        request->setAllowedPlanningTime(100.0);
+
+        fetch->setState(request->getRequest().start_state);
 
         // Visualize the scene.
         rviz.updateScene(scene);
         rviz.updateMarkers();
 
         RBX_INFO("Scene displayed! Press enter to plan...");
-        std::cin.get();
 
         // Do motion planning!
         planning_interface::MotionPlanResponse res = planner->plan(scene, request->getRequest());
-        if (res.error_code_.val != moveit_msgs::MoveItErrorCodes::SUCCESS)
-            return 1;
-
-        // Publish the trajectory to a topic to display in RViz
-        rviz.updateTrajectory(res);
+        if (res.error_code_.val == moveit_msgs::MoveItErrorCodes::SUCCESS)
+        {
+            // Publish the trajectory to a topic to display in RViz
+            rviz.updateTrajectory(res);
+        }
+        else 
+            RBX_INFO("No solution found.");
 
         RBX_INFO("Press enter to remove the scene.");
         std::cin.get();

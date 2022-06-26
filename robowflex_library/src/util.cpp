@@ -61,7 +61,7 @@ namespace
 #endif
         }
 
-        ros::start();
+//        ros::start();
     }
 }  // namespace
 

@@ -80,7 +80,7 @@ int main(int argc, char **argv)
         experiment.addQuery("vicon", scene, planner, request);
     }
 
-    auto dataset = experiment.benchmark(4);
+    auto dataset = experiment.benchmark();
 
     OMPLPlanDataSetOutputter output("robowflex");
     output.dump(*dataset);

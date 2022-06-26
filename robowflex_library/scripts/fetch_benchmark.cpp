@@ -80,7 +80,7 @@ int main(int argc, char **argv)
     experiment.setPostQueryCallback(
         [&](PlanDataSetPtr dataset, const PlanningQuery &) { plot.dump(*dataset); });
 
-    auto dataset = experiment.benchmark(4);
+    auto dataset = experiment.benchmark();
 
     OMPLPlanDataSetOutputter output("robowflex_fetch_demo");
     output.dump(*dataset);

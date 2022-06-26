@@ -65,6 +65,103 @@
 
 #include <robowflex_library/macros.h>
 
+namespace robowflex 
+{
+    // Taken from https://coryan.github.io/jaybeams/index.html
+    // TODO liscence appropriatly
+
+    /**
+     * Store the overrides for each class.
+     *
+     * Jaybeams configuration objects can be overriden "by-class",
+     * meaning, all configs of the same class receive the same overrides.
+     * This type is used to (temporarily) store the by-class overrides in
+     * a given context.
+     */
+    typedef std::map<std::string, YAML::Node> class_overrides;
+
+    namespace yaml
+    {
+        /**
+         * Merge two YAML nodes.
+         *
+         * Unlike a simple assignment, if @a source does not have a value
+         * for a given key, we keep the value from @a target.
+         */
+        void merge_node(YAML::Node target, YAML::Node const& source);
+
+        /**
+         * Merge all the values from @a source into @a target
+         *
+         * Unlike a simple assignment, if @a source does not have a value
+         * for a given key, we keep the value from @a target.
+         */
+        void merge_map(YAML::Node target, YAML::Node const& source);
+
+        /**
+         * Memberwise merge two sequences, from @a source into @a target.
+         *
+         * If @a source has more elements than @a target the additional values
+         * are appended.  If @a source has less elements than @a target, the
+         * extra values in @a target are unmodified.
+         */
+        void merge_sequences(YAML::Node target, YAML::Node const& source);
+
+        /**
+         * Merge the class-overrides from @a source into @a by_class.
+         *
+         * Given a set of by-class overrides apply any additional by-class
+         * overrides from @a source source into @a by_class.
+         */
+        void merge(class_overrides& by_class, YAML::Node source);
+
+        /**
+         * Recursively clone all the overrides in @a by_class.
+         */
+        class_overrides clone(class_overrides const& by_class);
+
+//        template <class... Args>
+//        MetricPtr decodeMetricVariant(const YAML::Node&);
+//
+//        template <class T, class... Args>
+//        MetricPtr decodeMetricVariantHelper(const YAML::Node& node)
+//        {
+//            try
+//            {
+//                MetricPtr metric = std::make_shared<Metric>();
+//                auto val = node.as<T>();
+//                *metric = val;
+//                return metric;
+//            }
+//            catch (YAML::BadConversion& e)
+//            {
+//                return decodeMetricVariant<Args...>(node);
+//            }
+//        }
+
+        // Modified version from https://gist.github.com/kunaltyagi/ebe13098cc22a717f793684659644f4e
+        // TODO liscence appropriatly
+
+        template <class... Args>
+        bool scalar_compare(const YAML::Node&, const YAML::Node&);
+
+        template <class T, class... Args>
+        bool helper_compare(const YAML::Node& source, const YAML::Node& target)
+        {
+            try
+            {
+                return source.as<T>() == target.as<T>();
+            }
+            catch (YAML::TypedBadConversion<T>& e)
+            {
+                return scalar_compare<Args...>(source, target);
+            }
+        }
+
+        bool isSubset(const YAML::Node& source, const YAML::Node& target);
+    }  // namespace yaml
+}
+
 /** \cond IGNORE */
 namespace YAML
 {

@@ -88,6 +88,14 @@ namespace robowflex
          */
         Robot(const std::string &name);
 
+        virtual ~Robot()
+        {
+            urdf_ = "";
+            srdf_ = "";
+            imap_.clear();
+            scratch_.reset();
+        }
+
         // non-copyable
         Robot(Robot const &) = delete;
         void operator=(Robot const &) = delete;
@@ -127,6 +135,8 @@ namespace robowflex
          */
         bool initializeFromYAML(const std::string &config_file);
 
+        bool initializeFromYAML(const YAML::Node& node);
+
         /** \brief Loads a YAML file into the robot's namespace under \a name.
          *  \param[in] name Name to load file under.
          *  \param[in] file File to load.
@@ -142,6 +152,10 @@ namespace robowflex
          */
         bool loadYAMLFile(const std::string &name, const std::string &file,
                           const PostProcessYAMLFunction &function);
+
+        bool loadYAMLNode(const std::string& name, const YAML::Node& node);
+
+        bool loadYAMLNode(const std::string& name, const YAML::Node& node, const PostProcessYAMLFunction& function);
 
         /** \brief Loads an XML or .xacro file into a string.
          *  \param[in] file File to load.
@@ -196,7 +210,9 @@ namespace robowflex
          *  \param[in] load_subgroups Load kinematic solvers for subgroups of the requested group.
          *  \return True on success, false on failure.
          */
-        bool loadKinematics(const std::string &group, bool load_subgroups = true);
+        void loadKinematics();
+
+        bool loadKinematics(const std::string &group_name, bool load_subgroups = false);
 
         /** \} */
 
@@ -382,6 +398,8 @@ namespace robowflex
             std::vector<Eigen::Quaterniond> orientations;  ///< Target orientations.
             EigenSTL::vector_Vector3d tolerances;          ///< XYZ Euler orientation tolerances.
 
+            std::vector<std::string> redundant_joints;
+
             /** \} */
 
             /** \name Additional Solver Options
@@ -464,6 +482,7 @@ namespace robowflex
              *  \param[in] tolerances Tolerance about \a orientation.
              */
             IKQuery(const std::string &group,                 //
+                    const std::string &tip,                //
                     const RobotPose &pose,                    //
                     double radius = constants::ik_tolerance,  //
                     const Eigen::Vector3d &tolerance = constants::ik_vec_tolerance);
@@ -477,6 +496,7 @@ namespace robowflex
              *  \param[in] tolerances Tolerance about \a orientation.
              */
             IKQuery(const std::string &group,                 //
+                    const std::string &tip,                //
                     const Eigen::Vector3d &position,          //
                     const Eigen::Quaterniond &orientation,    //
                     double radius = constants::ik_tolerance,  //
@@ -493,6 +513,7 @@ namespace robowflex
              *  \param[in] verbose If true, will give verbose collision checking output.
              */
             IKQuery(const std::string &group,                                        //
+                    const std::string &tip,                                          //
                     const GeometryConstPtr &region,                                  //
                     const RobotPose &pose,                                           //
                     const Eigen::Quaterniond &orientation,                           //
@@ -508,6 +529,7 @@ namespace robowflex
              *  \param[in] tolerances Position tolerances on the XYZ axes for the grasp.
              */
             IKQuery(const std::string &group,   //
+                    const std::string &tip,     //
                     const RobotPose &offset,    //
                     const ScenePtr &scene,      //
                     const std::string &object,  //
@@ -669,6 +691,16 @@ namespace robowflex
          *  \return True on success, false on failure.
          */
         bool setFromIK(const IKQuery &query, robot_state::RobotState &state) const;
+
+        bool setFromIKWithoutCollision(const IKQuery &query);
+
+        /** \brief Sets a robot state from an IK query. If the IK query fails the scratch state
+         *  retains its initial value.
+         *  \param[in] query Query for inverse kinematics. See Robot::IKQuery documentation for more.
+         *  \param[out] state Robot state to set from IK.
+         *  \return True on success, false on failure.
+         */
+        bool setFromIKWithoutCollision(const IKQuery &query, robot_state::RobotState &state) const;
 
         /** \brief Validates that a state satisfies an IK query's request poses.
          *  \param[in] query The query to validate.

@@ -178,7 +178,8 @@ bool Profiler::profilePlan(const PlannerPtr &planner,                           
             result.property_names.emplace_back("time REAL");
         }
 
-        progress_thread.reset(new std::thread([&] {
+        progress_thread.reset(new std::thread([&]
+        {
             bool at_least_once = options.progress_at_least_once;
             while (true)
             {
@@ -279,17 +280,17 @@ void Profiler::computeBuiltinMetrics(uint32_t options, const SceneConstPtr &scen
     if (options & Metrics::SMOOTHNESS)
         run.metrics["smoothness"] = run.success ? run.trajectory->getSmoothness() : 0.0;
 
-    run.metrics["robowflex_planner_name"] = run.query.planner->getName();
-    run.metrics["robowflex_robot_name"] = run.query.planner->getRobot()->getName();
+//    run.metrics["robowflex_planner_name"] = run.query.planner->getName();
+//    run.metrics["robowflex_robot_name"] = run.query.planner->getRobot()->getName();
 
-    run.metrics["request_planner_type"] = std::string(ROBOWFLEX_DEMANGLE(typeid(*run.query.planner).name()));
-    run.metrics["request_planner_id"] = run.query.request.planner_id;
+//    run.metrics["request_planner_type"] = std::string(ROBOWFLEX_DEMANGLE(typeid(*run.query.planner).name()));
+//    run.metrics["request_planner_id"] = run.query.request.planner_id;
     run.metrics["request_group_name"] = run.query.request.group_name;
-    run.metrics["request_num_planning_attempts"] = run.query.request.num_planning_attempts;
+//    run.metrics["request_num_planning_attempts"] = run.query.request.num_planning_attempts;
 
-    run.metrics["machine_hostname"] = run.hostname;
-    run.metrics["machine_thread_id"] = run.thread_id;
-    run.metrics["machine_process_id"] = run.process_id;
+//    run.metrics["machine_hostname"] = run.hostname;
+//    run.metrics["machine_thread_id"] = run.thread_id;
+//    run.metrics["machine_process_id"] = run.process_id;
 }
 
 void Profiler::computeCallbackMetrics(const PlannerPtr &planner,                             //
@@ -309,6 +310,16 @@ Experiment::Experiment(const std::string &name, const Profiler::Options &options
                        double allowed_time, std::size_t trials, bool timeout)
   : name_(name), allowed_time_(allowed_time), trials_(trials), timeout_(timeout), options_(options)
 {
+}
+
+bool Experiment::initializeFromYAML(const YAML::Node& node)
+{
+    allowed_time_ = node["allowed_time"].as<double>();
+    trials_ = node["trials"].as<std::size_t>();
+    timeout_ = node["timeout"].as<bool>();
+    options_.progress_update_rate = node["progress_update_rate"].as<double>();
+
+    return true;
 }
 
 void Experiment::addQuery(const std::string &planner_name,  //
@@ -427,7 +438,9 @@ PlanDataSetPtr Experiment::benchmark(std::size_t n_threads) const
     std::size_t total_queries = todo.size();
 
     for (std::size_t i = 0; i < n_threads; ++i)
-        threads.emplace_back(std::make_shared<std::thread>([&]() {
+    {
+        threads.emplace_back(std::make_shared<std::thread>([&]()
+        {
             std::size_t id = IO::getThreadID();
             while (true)
             {
@@ -474,8 +487,8 @@ PlanDataSetPtr Experiment::benchmark(std::size_t n_threads) const
 
                     // Add experiment specific metrics
                     data->metrics.emplace("query_trial", (int)info.trial);
-                    data->metrics.emplace("query_index", (int)info.index);
-                    data->metrics.emplace("query_timeout_trial", (int)timeout_trial);
+//                    data->metrics.emplace("query_index", (int)info.index);
+//                    data->metrics.emplace("query_timeout_trial", (int)timeout_trial);
                     data->metrics.emplace("query_start_time", IO::getSeconds(dataset->start, data->start));
                     data->metrics.emplace("query_finish_time", IO::getSeconds(dataset->start, data->finish));
 
@@ -515,6 +528,7 @@ PlanDataSetPtr Experiment::benchmark(std::size_t n_threads) const
                          completed_queries, total_queries);
             }
         }));
+    }
 
     for (const auto &thread : threads)
         thread->join();
@@ -631,7 +645,7 @@ void OMPLPlanDataSetOutputter::dump(const PlanDataSet &results)
     out << "-1 MB per run" << std::endl;
 
     // num_runs
-    // out << results.data.size() << " runs per planner" << std::endl;
+    out << results.trials << " runs per planner" << std::endl;
 
     // total_time
     out << results.time << " seconds spent to collect the data" << std::endl;

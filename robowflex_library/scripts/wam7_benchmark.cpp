@@ -53,7 +53,7 @@ int main(int argc, char **argv)
     Experiment experiment("wam7_demo", options, 5.0, 10);
     experiment.addQuery("ompl", scene, planner, request);
 
-    auto dataset = experiment.benchmark(4);
+    auto dataset = experiment.benchmark();
 
     JSONPlanDataSetOutputter json_output("test_log.json");
     json_output.dump(*dataset);

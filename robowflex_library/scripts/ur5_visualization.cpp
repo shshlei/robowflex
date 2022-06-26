@@ -4,6 +4,7 @@
 #include <robowflex_library/detail/ur5.h>
 #include <robowflex_library/geometry.h>
 #include <robowflex_library/io/visualization.h>
+#include <robowflex_library/io/broadcaster.h>
 #include <robowflex_library/log.h>
 #include <robowflex_library/scene.h>
 #include <robowflex_library/util.h>
@@ -28,6 +29,8 @@ int main(int argc, char **argv)
 
     // Create an RViz visualization helper. Publishes all topics and parameter under `/robowflex` by default.
     IO::RVIZHelper rviz(ur5);
+//    IO::RobotBroadcaster bc(ur5);
+//    bc.start();
 
     RBX_INFO("RViz Initialized! Press enter to continue (after your RViz is setup)...");
     std::cin.get();
@@ -47,13 +50,15 @@ int main(int argc, char **argv)
     MotionRequestBuilder request(planner, "manipulator");
     request.setStartConfiguration({0.0677, -0.8235, 0.9860, -0.1624, 0.0678, 0.0});
 
+    request.setAllowedPlanningTime(50);
+
     RobotPose pose = RobotPose::Identity();
     pose.translate(Eigen::Vector3d{-0.268, -0.826, 1.313});
     Eigen::Quaterniond orn{0, 0, 1, 0};
 
     auto region = Geometry::makeSphere(0.1);
 
-    request.setGoalRegion("ee_link", "world",   // links
+    request.setGoalRegion("ee_link", "base_link",   // links
                           pose, region,         // position
                           orn, {0.1, 0.1, 0.1}  // orientation
     );

@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     RobotPose goal_pose = ur5->getLinkTF("ee_link");
     goal_pose.translate(Eigen::Vector3d{0.0, -0.3, 0.0});
 
-    if (not ur5->setFromIK(Robot::IKQuery("manipulator", goal_pose)))
+    if (not ur5->setFromIK(Robot::IKQuery("manipulator", "tool0", goal_pose)))
     {
         RBX_ERROR("IK Failed");
         return 1;

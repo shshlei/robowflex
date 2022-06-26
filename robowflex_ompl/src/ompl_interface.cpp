@@ -18,7 +18,22 @@ OMPL::OMPLInterfacePlanner::OMPLInterfacePlanner(const RobotPtr &robot, const st
 
 bool OMPL::OMPLInterfacePlanner::initialize(const std::string &config_file, const OMPL::Settings settings)
 {
-    if (!loadOMPLConfig(handler_, config_file, configs_))
+    if (config_file.empty())
+        return false;
+
+    const auto &config = IO::loadFileToYAML(config_file);
+    if (!config.first)
+    {
+        RBX_ERROR("Failed to load planner configs.");
+        return false;
+    }
+
+    return initialize(config.second, settings);
+}
+
+bool OMPL::OMPLInterfacePlanner::initialize(const YAML::Node &node, const OMPL::Settings settings)
+{
+    if (!loadOMPLConfig(handler_, node, configs_))
         return false;
 
     interface_.reset(new ompl_interface::OMPLInterface(robot_->getModel(), handler_.getHandle()));

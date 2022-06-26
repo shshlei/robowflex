@@ -20,13 +20,13 @@ const std::string  //
     OMPL::Cob4OMPLPipelinePlanner::DEFAULT_CONFIG{"package://cob_moveit_config/robots/cob4-8/moveit/config/"
                                                   "ompl_planning.yaml"};
 
-const std::string Cob4Robot::RESOURCE_URDF{"package://robowflex_resources/cob/robots/cob4-8.urdf.xacro"};
-const std::string Cob4Robot::RESOURCE_SRDF{"package://robowflex_resources/cob/config/cob4-8.srdf"};
-const std::string Cob4Robot::RESOURCE_LIMITS{"package://robowflex_resources/cob/config/joint_limits.yaml"};
+const std::string Cob4Robot::RESOURCE_URDF{"package://robowflex_resources/robots/cob/robots/cob4-8.urdf.xacro"};
+const std::string Cob4Robot::RESOURCE_SRDF{"package://robowflex_resources/robots/cob/config/cob4-8.srdf"};
+const std::string Cob4Robot::RESOURCE_LIMITS{"package://robowflex_resources/robots/cob/config/joint_limits.yaml"};
 const std::string  //
-    Cob4Robot::RESOURCE_KINEMATICS{"package://robowflex_resources/cob/config/kinematics.yaml"};
+    Cob4Robot::RESOURCE_KINEMATICS{"package://robowflex_resources/robots/cob/config/kinematics.yaml"};
 const std::string  //
-    OMPL::Cob4OMPLPipelinePlanner::RESOURCE_CONFIG{"package://robowflex_resources/cob/config/"
+    OMPL::Cob4OMPLPipelinePlanner::RESOURCE_CONFIG{"package://robowflex_resources/robots/cob/config/"
                                                    "ompl_planning.yaml"};
 
 Cob4Robot::Cob4Robot() : Robot("cob4")
@@ -49,8 +49,7 @@ bool Cob4Robot::initialize()
         success = Robot::initialize(RESOURCE_URDF, RESOURCE_SRDF, RESOURCE_LIMITS, RESOURCE_KINEMATICS);
     }
 
-    loadKinematics("arm_left");
-    loadKinematics("arm_right");
+    loadKinematics();
 
     Cob4Robot::openGrippers();
 

@@ -20,16 +20,16 @@ const std::string  //
     };
 
 const std::string  //
-    UR5Robot::RESOURCE_URDF{"package://robowflex_resources/ur/robots/ur5_robotiq_robot_limited.urdf.xacro"};
+    UR5Robot::RESOURCE_URDF{"package://robowflex_resources/robots/ur/robots/ur5_robotiq_robot_limited.urdf.xacro"};
 const std::string  //
-    UR5Robot::RESOURCE_SRDF{"package://robowflex_resources/ur/config/ur5/ur5_robotiq85.srdf.xacro"};
+    UR5Robot::RESOURCE_SRDF{"package://robowflex_resources/robots/ur/config/ur5/ur5_robotiq85.srdf.xacro"};
 const std::string  //
-    UR5Robot::RESOURCE_LIMITS{"package://robowflex_resources/ur/config/ur5/joint_limits.yaml"};
+    UR5Robot::RESOURCE_LIMITS{"package://robowflex_resources/robots/ur/config/ur5/joint_limits.yaml"};
 const std::string  //
-    UR5Robot::RESOURCE_KINEMATICS{"package://robowflex_resources/ur/config/ur5/kinematics.yaml"};
+    UR5Robot::RESOURCE_KINEMATICS{"package://robowflex_resources/robots/ur/config/ur5/kinematics.yaml"};
 const std::string  //
     OMPL::UR5OMPLPipelinePlanner::RESOURCE_CONFIG{
-        "package://robowflex_resources/ur/config/ur5/ompl_planning.yaml"  //
+        "package://robowflex_resources/robots/ur/config/ur5/ompl_planning.yaml"  //
     };
 
 UR5Robot::UR5Robot() : Robot("ur5")
@@ -52,7 +52,7 @@ bool UR5Robot::initialize()
         success = Robot::initialize(RESOURCE_URDF, RESOURCE_SRDF, RESOURCE_LIMITS, RESOURCE_KINEMATICS);
     }
 
-    loadKinematics("manipulator");
+    loadKinematics();
 
     return success;
 }

@@ -4,7 +4,6 @@
 
 #include <moveit_msgs/DisplayRobotState.h>
 #include <moveit_msgs/DisplayTrajectory.h>
-#include <moveit_msgs/PlanningScene.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -14,7 +13,6 @@
 #include <robowflex_library/builder.h>
 #include <robowflex_library/constants.h>
 #include <robowflex_library/geometry.h>
-#include <robowflex_library/io/colormap.h>
 #include <robowflex_library/io/visualization.h>
 #include <robowflex_library/log.h>
 #include <robowflex_library/planning.h>
@@ -36,6 +34,15 @@ namespace
     }
 };  // namespace
 
+IO::RVIZHelper::RVIZHelper(const std::string &name)
+  : nh_("/" + name)
+{
+    trajectory_pub_ = nh_.advertise<moveit_msgs::DisplayTrajectory>("trajectory", 1);
+    state_pub_ = nh_.advertise<moveit_msgs::DisplayRobotState>("state", 1);
+    scene_pub_ = nh_.advertise<moveit_msgs::PlanningScene>("scene", 1);
+    marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/visualization_marker_array", 100);
+}
+
 IO::RVIZHelper::RVIZHelper(const RobotConstPtr &robot, const std::string &name)
   : robot_(robot), nh_("/" + name)
 {
@@ -50,7 +57,6 @@ IO::RVIZHelper::RVIZHelper(const RobotConstPtr &robot, const std::string &name)
     trajectory_pub_ = nh_.advertise<moveit_msgs::DisplayTrajectory>("trajectory", 1);
     state_pub_ = nh_.advertise<moveit_msgs::DisplayRobotState>("state", 1);
     scene_pub_ = nh_.advertise<moveit_msgs::PlanningScene>("scene", 1);
-    pcd_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("pcd", 1);
     marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/visualization_marker_array", 100);
 }
 
@@ -490,18 +496,18 @@ void IO::RVIZHelper::updateScene(const SceneConstPtr &scene)
     scene_pub_.publish(to_pub);
 }
 
-void IO::RVIZHelper::updatePCD(const sensor_msgs::PointCloud2 &msg)
+void IO::RVIZHelper::updateScene(const moveit_msgs::PlanningScene& scene)
 {
-    if (pcd_pub_.getNumSubscribers() < 1)
+    if (scene_pub_.getNumSubscribers() < 1)
     {
-        RBX_INFO("Waiting for pcd subscribers...");
+        RBX_INFO("Waiting for Scene subscribers...");
 
         ros::WallDuration pause(0.1);
-        while (pcd_pub_.getNumSubscribers() < 1)
+        while (scene_pub_.getNumSubscribers() < 1)
             pause.sleep();
     }
 
-    pcd_pub_.publish(msg);
+    scene_pub_.publish(scene);
 }
 
 void IO::RVIZHelper::updateMarkers()
