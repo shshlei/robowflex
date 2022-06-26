@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<launch>
+
+    <!-- By default, we are not in debug mode -->
+    <arg name="debug" default="false" />
+    <arg unless="$(arg debug)" name="launch_prefix" value="" />
+    <arg     if="$(arg debug)" name="launch_prefix" value="gdb --args" />
+
+    <!-- Launch benchmark node -->
+    <node name="fetch_scenes_visualize" pkg="robowflex_library" type="fetch_scenes_visualize" output="screen" clear_params="true" required="true" launch-prefix="$(arg launch_prefix)"/>
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch"/>
+
+</launch>

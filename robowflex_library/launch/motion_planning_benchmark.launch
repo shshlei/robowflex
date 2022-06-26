@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<launch>
+
+    <!-- By default, we are not in debug mode -->
+    <arg name="debug" default="false" />
+    <arg unless="$(arg debug)" name="launch_prefix" value="" />
+    <arg     if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
+
+    <arg name="visualize" default="true" />
+
+    <!-- Benchmark configuration file -->
+    <arg name="config_file" default="$(find robowflex_library)/config/motion_planning_benchmark_fetch_mobile_manipulator_messy.yaml"/>
+    <arg name="save_file" default="robowflex3"/>
+
+    <!-- Launch benchmark node -->
+    <node name="motion_planning_benchmark" pkg="robowflex_library" type="motion_planning_benchmark" output="screen" clear_params="true" required="true" launch-prefix="$(arg launch_prefix)">
+        <param name="config_file" value="$(arg config_file)"/>
+        <param name="save_file" value="$(arg save_file)"/>
+        <param name="visualize"   value="$(arg visualize)"/>
+    </node>
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch">
+      <arg name="visualize" value="$(arg visualize)"/>
+    </include>
+</launch>

@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<launch>
+
+  <!-- By default, we are not in debug mode -->
+  <arg name="debug" default="true" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="valgrind --leak-check=full" />
+
+  <!-- By default we do not overwrite the URDF. Change the following to true to change the default behavior -->
+  <arg name="load_robot_description" default="true"/>
+
+  <!-- The name of the parameter under which the URDF is loaded -->
+  <arg name="robot_description" default="robot_description"/>
+
+  <!-- Load universal robot description format (URDF) -->
+  <param if="$(arg load_robot_description)" name="$(arg robot_description)" command="$(find xacro)/xacro $(find robowflex_resources)/robots/fetch/robots/fetch.urdf " />
+
+  <!-- The semantic description that corresponds to the URDF -->
+  <param name="$(arg robot_description)_semantic" command="$(find xacro)/xacro '$(find robowflex_resources)/robots/fetch/config/fetch.srdf'" />
+
+  <!-- Load updated joint limits (override information from URDF) -->
+  <group ns="$(arg robot_description)_planning">
+      <rosparam command="load" file="$(find robowflex_resources)/robots/fetch/config/joint_limits.yaml"/>
+  </group>
+
+  <!-- Load default settings for kinematics; these settings are overridden by settings in a node's namespace -->
+  <group ns="$(arg robot_description)_kinematics">
+    <rosparam command="load" file="$(find robowflex_resources)/robots/fetch/config/kinematics.yaml"/>
+  </group>
+
+  <node name="robot_model_and_robot_state_test" pkg="moveit_tutorials" type="robot_model_and_robot_state_test" respawn="false" output="screen" launch-prefix="$(arg launch_prefix)">
+    <!--rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/-->
+  </node>
+
+</launch>

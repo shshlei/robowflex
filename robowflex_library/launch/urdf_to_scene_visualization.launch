@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch"/>
+
+    <!-- By default, we are not in debug mode -->
+    <arg name="launch_prefix" default=""/>
+
+    <!-- Load xacro scene -->
+    <param name="scene_urdf" command="$(find xacro)/xacro '$(find urdf_to_scene)/config/scene.urdf.xacro'"/>
+
+    <!-- Launch node -->
+    <node name="urdf_to_scene_visualization" pkg="robowflex_library" type="urdf_to_scene_visualization" output="screen" required="true" launch-prefix="$(arg launch_prefix)"/>
+
+</launch>

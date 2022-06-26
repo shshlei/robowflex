@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<launch>
+
+    <!-- By default, we are not in debug mode -->
+    <arg name="debug" default="false" />
+    <arg unless="$(arg debug)" name="launch_prefix" value="" />
+    <arg     if="$(arg debug)" name="launch_prefix" value="gdb --args" />
+
+    <!-- Benchmark configuration file -->
+    <!--arg name="config_file" default="$(find moveit_benchmark_suite)/config/motion_planning_pp.yaml"/-->
+
+    <!-- Launch benchmark node -->
+    <node name="cob4_visualization" pkg="robowflex_library" type="cob4_visualization" output="screen" clear_params="true" required="true" launch-prefix="$(arg launch_prefix)"/>
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch"/>
+
+</launch>

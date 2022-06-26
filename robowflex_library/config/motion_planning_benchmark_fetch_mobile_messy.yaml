@@ -1,0 +1,76 @@
+benchmark_config:
+  name: "Fetch_Mobile_Messy"
+  parameters: 
+    allowed_time: 500.0 
+    trials: 20
+    timeout: false
+    progress_update_rate: 0.5
+
+# Describes config for building motion planning pair-wise queries
+profiler_config:
+
+  robot:
+    name: fetch 
+    resources:
+      urdf: package://robowflex_resources/robots/fetch/robots/fetch.urdf
+      srdf: package://robowflex_resources/robots/fetch/config/fetch.srdf
+      joint_limits: package://robowflex_resources/robots/fetch/config/joint_limits.yaml
+      kinematics: package://robowflex_resources/robots/fetch/config/kinematics.yaml
+
+  scenes:
+    - name: messy_scene
+      resource: package://robowflex_resources/scenes/messy/messy.xacro
+      parameters:
+        safety_distance: 0.03
+        contact_distance: 0.03
+        negative_distance: -0.05
+
+  requests:
+    - name: jc
+      resource: package://robowflex_resources/requests/messy/fetch/fetch_mobile_messy_request.yaml
+
+  # OPTIONAL Override 'requests' with moveit_msgs/MotionPlanRequest respective field/s
+  requests_override:
+    allowed_planning_time: 500.0
+    num_planning_attempts: 1
+
+  collision_detectors:
+    - FCLNew
+
+  # Resource moveit_config (planning pipeline)
+  planning_pipelines:
+    - name: ompl
+      resource: package://robowflex_resources/robots/fetch/config/ompl_planning.yaml
+      plugin: ompl_interface/OMPLPlanner
+      adapters:
+        [] 
+        #- AddTimeParameterization
+        #- FixWorkspaceBounds
+        #- FixStartStateBounds
+        #- FixStartStateCollision
+        #- FixStartStatePathConstraints
+      settings:
+        max_goal_samples: 10
+        max_goal_sampling_attempts: 1000
+        max_planning_threads: 4
+        max_solution_segment_length: 0.0
+        max_state_sampling_attempts: 4
+        minimum_waypoint_count: 10
+        simplify_solutions: false 
+        hybridize_solutions: true
+        interpolate_solutions: true
+        use_constraints_approximations: false
+        display_random_valid_states: false
+        link_for_exploration_tree: ""
+        maximum_waypoint_distance: 0.0
+
+  planner_ids:
+    - SBLkConfigDefault
+    - ESTkConfigDefault
+    - LBKPIECEkConfigDefault
+    - BKPIECEkConfigDefault
+    - KPIECEkConfigDefault
+    - RRTkConfigDefault
+    - RRTConnectkConfigDefault
+    - PRMkConfigDefault
+    - PRMstarkConfigDefault

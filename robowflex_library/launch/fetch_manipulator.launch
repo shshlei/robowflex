@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<launch>
+
+    <arg name="visualize" default="true" />
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch">
+      <arg name="visualize" value="$(arg visualize)"/>
+    </include>
+
+    <arg name="run_time" default="10.0" />
+    <arg name="run_cycle" default="1" />
+    <arg name="planner_id" default="RRTConnectkConfigDefault" />
+    <!-- Launch benchmark node -->
+    <node name="fetch_manipulator" pkg="robowflex_library" type="fetch_manipulator" output="screen" clear_params="true" required="true">
+        <param name="planner_id"   value="$(arg planner_id)"/>
+        <param name="run_time"   value="$(arg run_time)"/>
+        <param name="run_cycle"   value="$(arg run_cycle)"/>
+    </node>
+</launch>

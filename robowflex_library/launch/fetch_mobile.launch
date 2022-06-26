@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<launch>
+
+    <arg name="visualize" default="true" />
+
+    <include file="$(find robowflex_library)/launch/moveit_rviz.launch">
+      <arg name="visualize" value="$(arg visualize)"/>
+    </include>
+
+    <!-- By default, we are not in debug mode -->
+    <arg name="debug" default="false" />
+    <arg unless="$(arg debug)" name="launch_prefix" value="" />
+    <arg     if="$(arg debug)" name="launch_prefix" value="valgrind --leak-check=full --show-leak-kinds=all --log-file=robowflexlog.txt" />
+
+    <arg name="run_time" default="10.0" />
+    <arg name="run_cycle" default="1" />
+    <arg name="planner_id" default="RRTConnectkConfigDefault" />
+    <!-- Launch benchmark node -->
+    <node name="fetch_mobile" pkg="robowflex_library" type="fetch_mobile" output="screen" clear_params="true" required="true" launch-prefix="$(arg launch_prefix)">
+        <param name="planner_id"   value="$(arg planner_id)"/>
+        <param name="run_time"   value="$(arg run_time)"/>
+        <param name="run_cycle"   value="$(arg run_cycle)"/>
+    </node>
+</launch>

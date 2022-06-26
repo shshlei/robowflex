@@ -1,0 +1,64 @@
+# Describes benchmark parameters (independant of profilers)
+benchmark_config:
+  parameters: 
+    allowed_time: 50.0 
+    trials: 100
+    timeout: false
+    progress_update_rate: 0.05
+
+# Describes config for building motion planning pair-wise queries
+profiler_config:
+
+  # OPTIONAL Override 'requests' with moveit_msgs/MotionPlanRequest respective field/s
+  requests_override:
+    allowed_planning_time: 5.0
+    num_planning_attempts: 1
+
+  # Resource moveit_msgs/MotionPlanRequest
+  requests:
+    - name: jc
+      resource: package://moveit_benchmark_suite_resources/requests/bbt/panda/jc.yaml
+    - name: jc_pcp
+      resource: package://moveit_benchmark_suite_resources/requests/bbt/panda/jc_pcp.yaml
+
+  # Resource moveit_config (robot)
+  robot:
+    name: panda
+    resources:
+      urdf: package://moveit_benchmark_suite_resources/robots/panda/urdf/panda.urdf
+      srdf: package://moveit_benchmark_suite_resources/robots/panda/config/panda.srdf
+      kinematics: package://moveit_benchmark_suite_resources/robots/panda/config/kinematics.yaml
+      joint_limits: package://moveit_benchmark_suite_resources/robots/panda/config/joint_limits.yaml
+
+  # Resource moveit_msgs/PlanningScene
+  scenes:
+    - name: empty_scene
+      resource: package://moveit_benchmark_suite_resources/scenes/empty/empty.urdf.xacro
+    # - name: primitive_scene
+    #   resource: package://moveit_benchmark_suite_resources/scenes/bbt/panda/primitive.urdf.xacro
+    # - name: mesh_scene
+    #   resource: package://moveit_benchmark_suite_resources/scenes/bbt/panda/mesh_16k.urdf.xacro
+
+  collision_detectors:
+    - FCL
+
+  # Resource moveit_config (planning pipeline)
+  planning_pipelines:
+    - name: ompl
+      # Override/Extend moveit_msgs/MotionPlanRequest pipeline_id field
+      resource: package://moveit_benchmark_suite_resources/robots/panda/config/ompl_planning.yaml
+      # OPTIONAL Override/Extend moveit_msgs/MotionPlanRequest planner_id field
+      settings:
+        max_goal_samples: 10
+        max_goal_sampling_attempts: 1000
+        max_planning_threads: 4
+        max_solution_segment_length: 0.0
+        max_state_sampling_attempts: 4
+        minimum_waypoint_count: 10
+        simplify_solutions: true
+        hybridize_solutions: true
+        interpolate_solutions: true
+        use_constraints_approximations: false
+        display_random_valid_states: false
+        link_for_exploration_tree: ""
+        maximum_waypoint_distance: 0.0
